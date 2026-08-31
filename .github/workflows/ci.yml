@@ -1,0 +1,92 @@
+name: CI
+
+# Runs on every push and pull request. No deployment here.
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+# Least privilege: the pipeline only needs to read the repo. No secrets are used.
+permissions:
+  contents: read
+
+jobs:
+  # ── Frontend: install → lint → type-check → test → build ───────────────
+  frontend:
+    name: Frontend
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./-yatruSathiFrontend-
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20" # matches the frontend Dockerfile build stage
+          cache: npm
+          cache-dependency-path: ./-yatruSathiFrontend-/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Type check
+        run: npm run typecheck
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Build
+        run: npm run build
+
+  # ── Backend: install → Django check → migrations check → lint → tests ──
+  backend:
+    name: Backend
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./-yatrubackend-
+    env:
+      # Placeholder value — required for settings to import, not a real secret.
+      SECRET_KEY: ci-not-a-real-secret
+      DEBUG: "True"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13" # matches the backend Dockerfile
+          cache: pip
+          cache-dependency-path: ./-yatrubackend-/requirements/*.txt
+
+      - name: Install dependencies
+        run: pip install -r requirements/dev.txt
+
+      - name: Django system check
+        run: python manage.py check
+
+      - name: Migrations are up to date
+        run: python manage.py makemigrations --check --dry-run
+
+      - name: Lint (flake8)
+        run: flake8 backend event
+
+      - name: Tests (pytest)
+        run: pytest
+
+  # ── Docker images: only if frontend and backend pass ──────────────────
+  docker:
+    name: Docker images
+    runs-on: ubuntu-latest
+    needs: [frontend, backend]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build backend and frontend images
+        # Reuses docker-compose.yml build contexts/args. Nothing is pushed.
+        run: docker compose build
