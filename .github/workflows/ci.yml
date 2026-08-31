@@ -75,14 +75,49 @@ jobs:
       - name: Tests (pytest)
         run: pytest
 
-  # ── Docker images: only if frontend and backend pass ──────────────────
-  docker:
-    name: Docker images
+  # ── Security: dependency + image scanning (only if frontend/backend pass) ──
+  security:
+    name: Security scan
     runs-on: ubuntu-latest
     needs: [frontend, backend]
+    env:
+      # Pull Trivy's vuln DB from the ECR mirror — avoids anonymous GHCR rate limits.
+      TRIVY_DB_REPOSITORY: public.ecr.aws/aquasecurity/trivy-db:2
     steps:
       - uses: actions/checkout@v5
 
+      # Dependency vulnerabilities from the lockfiles (npm + pip). Reported only:
+      # app-dependency CVEs are tracked via Dependabot, not a hard merge gate.
+      - name: Trivy — dependency scan
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          scanners: vuln
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "0"
+
+      # Build both images (also validates docker-compose.yml). --pull picks up
+      # patched base layers so the scans below don't trip on stale bases.
       - name: Build backend and frontend images
-        # Reuses docker-compose.yml build contexts/args. Nothing is pushed.
-        run: docker compose build
+        run: docker compose build --pull
+
+      # Image vulnerabilities. A HIGH/CRITICAL that has a fix available fails
+      # the pipeline; unfixed ones are ignored (nothing to act on).
+      - name: Trivy — backend image
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: yatrusathi-backend:local
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+
+      - name: Trivy — frontend image
+        if: ${{ !cancelled() }} # still scan the frontend if the backend scan failed
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: yatrusathi-frontend:local
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
