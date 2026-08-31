@@ -1,0 +1,17 @@
+# Formatting / import-ordering config. Kept minimal and black-compatible.
+
+[tool.black]
+line-length = 88
+target-version = ["py312", "py313"]
+extend-exclude = '''
+/(
+  | migrations
+  | \.venv
+  | venv
+)/
+'''
+
+[tool.isort]
+profile = "black"
+line_length = 88
+skip_glob = ["*/migrations/*", ".venv/*", "venv/*"]

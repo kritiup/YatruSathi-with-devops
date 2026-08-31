@@ -1,0 +1,3 @@
+# Deployment entry point. Render's build.sh runs `pip install -r requirements.txt`.
+# Environment-specific pins live in requirements/.
+-r requirements/prod.txt

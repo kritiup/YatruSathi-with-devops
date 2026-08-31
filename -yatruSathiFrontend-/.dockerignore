@@ -1,0 +1,32 @@
+# ─── VCS / CI / editor ───────────────────────────────────────────────
+.git
+.gitignore
+.github
+.vscode
+.idea
+
+# ─── Installed deps & build output (regenerated in the image) ────────
+node_modules
+dist
+dist-ssr
+
+# ─── Secrets / local env (code has safe fallbacks; pass VITE_* as build args) ──
+.env
+.env.*
+!.env.example
+
+# ─── Logs & caches ──────────────────────────────────────────────────
+*.log
+npm-debug.log*
+.eslintcache
+.cache
+
+# ─── Docs / lint / formatter config (not needed to build) ───────────
+*.md
+.prettierrc
+.prettierignore
+eslint.config.js
+
+# ─── Docker ─────────────────────────────────────────────────────────
+Dockerfile
+.dockerignore

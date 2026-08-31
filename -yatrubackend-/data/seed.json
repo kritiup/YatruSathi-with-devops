@@ -1,0 +1,76 @@
+[
+  {
+    "model": "auth.user",
+    "pk": 1,
+    "fields": {
+      "password": "pbkdf2_sha256$1200000$GOBgtz6e3n2mFCByYyeqV8$fomvAZOhi5Om32RcYVFo4XTpzFDvxH4XDzWXRq6ff6M=",
+      "last_login": null,
+      "is_superuser": false,
+      "username": "rekha123",
+      "first_name": "Rekha",
+      "last_name": "Bhusal",
+      "email": "rekhabhusal08@gmail.com",
+      "is_staff": false,
+      "is_active": true,
+      "date_joined": "2026-02-03T05:14:37.351Z",
+      "groups": [],
+      "user_permissions": []
+    }
+  },
+  {
+    "model": "event.event",
+    "pk": 1,
+    "fields": {
+      "title": "Kathmandu Walk",
+      "description": "This is the sample",
+      "date": "2026-02-14T11:00:00Z",
+      "location": "Kathmandu",
+      "category": "Trekking",
+      "image": "event_images/Aesthetic-Collage-Desktop-Wallpaper-Laptop.jpg",
+      "tags": null,
+      "start_date_time": null,
+      "end_date_time": null,
+      "location_name": null,
+      "map_link": null,
+      "min_participants": 1,
+      "max_participants": 10,
+      "gender_preference": "any",
+      "age_limit": null,
+      "prior_experience_required": false,
+      "is_free_event": false,
+      "ticket_price": "0.00",
+      "pay_on_site": false,
+      "equipment_list": null,
+      "organizer_name": null,
+      "contact_email": null,
+      "phone_number": null,
+      "social_media_link": null,
+      "created_by": 1,
+      "created_at": "2026-02-03T05:16:52.555Z",
+      "updated_at": "2026-02-03T05:16:52.555Z",
+      "participants": []
+    }
+  },
+  {
+    "model": "event.profile",
+    "pk": 1,
+    "fields": {
+      "user": 1,
+      "bio": "",
+      "hobbies": "",
+      "avatar": "",
+      "phone": "",
+      "location": "",
+      "full_name": "",
+      "citizenship_number": "",
+      "document_image": "",
+      "is_kyc_verified": false,
+      "kyc_submitted_at": null
+    }
+  },
+  {
+    "model": "authtoken.token",
+    "pk": "b5f5e920fa96131952d9a2351e8be18f49142a8e",
+    "fields": { "user": 1, "created": "2026-02-03T05:14:40.564Z" }
+  }
+]

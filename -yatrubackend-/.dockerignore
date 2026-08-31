@@ -1,0 +1,46 @@
+# ─── VCS / CI / editor ───────────────────────────────────────────────
+.git
+.gitignore
+.github
+.claude
+.trigger
+.vscode
+.idea
+
+# ─── Python caches / local virtualenvs ──────────────────────────────
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+venv/
+.venv/
+env/
+ENV/
+
+# ─── Secrets / local env ────────────────────────────────────────────
+.env
+.env.*
+!.env.example
+
+# ─── Local data & generated artifacts (provided via volumes at runtime) ──
+db.sqlite3
+db.sqlite3-journal
+media/
+staticfiles/
+static/
+logs/*.log
+avatars/
+event_photos/
+
+# ─── Dev-only tooling / docs / alt deploy configs ───────────────────
+requirements/dev.txt
+test_admin_api.py
+Procfile
+render.yaml
+runtime.txt
+*.md
+docs/

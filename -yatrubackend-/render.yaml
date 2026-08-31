@@ -1,0 +1,24 @@
+services:
+  # Django Backend Service
+  - type: web
+    name: yatrusathi-backend
+    env: python
+    region: oregon # Free tier available region
+    plan: free # Free tier
+    branch: main # Deploy from main branch
+    buildCommand: 'scripts/build.sh'
+    startCommand: 'scripts/start.sh'
+    # NOTE: the app uses SQLite (db.sqlite3). Render's filesystem is ephemeral,
+    # so data does not survive a deploy/restart. Attach a persistent disk
+    # (mount at the repo root) or move back to a managed Postgres before
+    # relying on this in production.
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.7
+      - key: DEBUG
+        value: False
+      - key: SECRET_KEY
+        generateValue: true
+      - key: ALLOWED_HOSTS
+        value: .onrender.com
+    autoDeploy: true # Auto-deploy on git push
