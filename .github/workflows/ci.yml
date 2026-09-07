@@ -21,10 +21,10 @@ jobs:
       run:
         working-directory: ./-yatruSathiFrontend-
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       - name: Set up Node
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@v7
         with:
           node-version: "22" # current LTS; matches the frontend Dockerfile build stage
           cache: npm
@@ -60,10 +60,10 @@ jobs:
       SECRET_KEY: ci-not-a-real-secret
       DEBUG: "True"
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: "3.13" # matches the backend Dockerfile
           cache: pip
@@ -92,10 +92,10 @@ jobs:
       run:
         working-directory: ./-Yatrusathi-AIchatbot
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: "3.13" # matches the chatbot Dockerfile
           cache: pip
@@ -123,11 +123,11 @@ jobs:
     name: Secret scan
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0 # full history so new commits on a PR are all scanned
       - name: gitleaks
-        uses: gitleaks/gitleaks-action@v2
+        uses: gitleaks/gitleaks-action@v3
         env:
           GITHUB_TOKEN: ${{ github.token }}
 
@@ -143,8 +143,8 @@ jobs:
           - ./-yatruSathiFrontend-/Dockerfile
           - ./-Yatrusathi-AIchatbot/Dockerfile
     steps:
-      - uses: actions/checkout@v5
-      - uses: hadolint/hadolint-action@v3.1.0
+      - uses: actions/checkout@v7
+      - uses: hadolint/hadolint-action@v3.5.0
         with:
           dockerfile: ${{ matrix.dockerfile }}
           # DL3008/DL3013: base images here don't pin OS/pip packages by design.
@@ -160,12 +160,12 @@ jobs:
       # Pull Trivy's vuln DB from the ECR mirror — avoids anonymous GHCR rate limits.
       TRIVY_DB_REPOSITORY: public.ecr.aws/aquasecurity/trivy-db:2
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       # Dependency vulnerabilities from the lockfiles (npm + pip). Reported only:
       # app-dependency CVEs are tracked via Dependabot, not a hard merge gate.
       - name: Trivy — dependency scan
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           scan-type: fs
           scan-ref: .
@@ -182,7 +182,7 @@ jobs:
       # Image vulnerabilities. A HIGH/CRITICAL that has a fix available fails
       # the pipeline; unfixed ones are ignored (nothing to act on).
       - name: Trivy — backend image
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: yatrusathi-backend:local
           severity: HIGH,CRITICAL
@@ -191,7 +191,7 @@ jobs:
 
       - name: Trivy — frontend image
         if: ${{ !cancelled() }} # still scan the frontend if the backend scan failed
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: yatrusathi-frontend:local
           severity: HIGH,CRITICAL
@@ -200,7 +200,7 @@ jobs:
 
       - name: Trivy — chatbot image
         if: ${{ !cancelled() }} # scan regardless of earlier image-scan results
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: yatrusathi-chatbot:local
           severity: HIGH,CRITICAL
@@ -225,7 +225,7 @@ jobs:
     outputs:
       image_tag: ${{ github.sha }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       # Rebuild all three images (this job has its own runner). Same build the
       # security job scanned: compose tags them yatrusathi-<svc>:local.
@@ -233,7 +233,7 @@ jobs:
         run: docker compose build
 
       - name: Configure AWS credentials (OIDC)
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@v6
         with:
           role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
@@ -284,8 +284,8 @@ jobs:
       VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
       VITE_SUPABASE_ANON_KEY: ${{ vars.VITE_SUPABASE_ANON_KEY }}
     steps:
-      - uses: actions/checkout@v5
-      - uses: aws-actions/configure-aws-credentials@v4
+      - uses: actions/checkout@v7
+      - uses: aws-actions/configure-aws-credentials@v6
         with:
           role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
@@ -322,8 +322,8 @@ jobs:
       VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
       VITE_SUPABASE_ANON_KEY: ${{ vars.VITE_SUPABASE_ANON_KEY }}
     steps:
-      - uses: actions/checkout@v5
-      - uses: aws-actions/configure-aws-credentials@v4
+      - uses: actions/checkout@v7
+      - uses: aws-actions/configure-aws-credentials@v6
         with:
           role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
