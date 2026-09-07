@@ -1,0 +1,43 @@
+# One internet-facing ALB. Rules are evaluated top-to-bottom by the AWS Load
+# Balancer Controller, so the chatbot's specific paths must precede the
+# backend's catch-all `/api` and the frontend's `/`.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: yatrusathi
+  annotations:
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP":80}]'
+    alb.ingress.kubernetes.io/healthcheck-path: /
+    # Long idle timeout for the chatbot's SSE stream and Socket.IO upgrades.
+    alb.ingress.kubernetes.io/load-balancer-attributes: idle_timeout.timeout_seconds=3600
+    alb.ingress.kubernetes.io/group.name: yatrusathi
+    # Add a cert ARN + '{"HTTPS":443}' to listen-ports, and an
+    # ssl-redirect action, once a domain + ACM cert exist.
+spec:
+  ingressClassName: alb
+  rules:
+    - http:
+        paths:
+          - path: /socket.io
+            pathType: Prefix
+            backend: { service: { name: chatbot, port: { number: 5005 } } }
+          - path: /api/chat
+            pathType: Prefix
+            backend: { service: { name: chatbot, port: { number: 5005 } } }
+          - path: /api/session
+            pathType: Prefix
+            backend: { service: { name: chatbot, port: { number: 5005 } } }
+          - path: /api
+            pathType: Prefix
+            backend: { service: { name: backend, port: { number: 8000 } } }
+          - path: /admin
+            pathType: Prefix
+            backend: { service: { name: backend, port: { number: 8000 } } }
+          - path: /static
+            pathType: Prefix
+            backend: { service: { name: backend, port: { number: 8000 } } }
+          - path: /
+            pathType: Prefix
+            backend: { service: { name: frontend, port: { number: 80 } } }

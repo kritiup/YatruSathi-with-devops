@@ -7,6 +7,11 @@ django-filter==25.2
 
 python-dotenv==1.2.2
 
+# Database — SQLite by default; DATABASE_URL switches to Postgres in
+# containers / Kubernetes. psycopg[binary] needs no system libraries.
+dj-database-url==2.3.0
+psycopg[binary]==3.2.13
+
 Pillow==12.3.0
 PyJWT==2.13.0
 requests==2.33.0

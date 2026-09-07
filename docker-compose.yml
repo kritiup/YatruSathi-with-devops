@@ -5,6 +5,7 @@
 #
 # Frontend  →  http://localhost:${FRONTEND_PORT:-8080}
 # Backend   →  http://localhost:${BACKEND_PORT:-8000}/api/
+# Chatbot   →  http://localhost:${CHATBOT_PORT:-5005}/  (AI + Socket.IO)
 #
 # Supabase is an EXTERNAL managed service — it is never containerised here.
 # The frontend talks to it directly from the browser using the public
@@ -60,6 +61,39 @@ services:
       start_period: 40s
       retries: 3
 
+  # ───────────────────────────  Flask AI service  ─────────────────────
+  chatbot:
+    build:
+      context: ./-Yatrusathi-AIchatbot
+    image: yatrusathi-chatbot:${IMAGE_TAG:-local}
+    restart: unless-stopped
+    environment:
+      # Flask session signing — no secret is baked into the image.
+      SECRET_KEY: ${CHATBOT_SECRET_KEY:-yatrusathi-insecure-compose-dev-key-change-me}
+      # Groq Cloud. Blank ⇒ the service still runs, answering from the
+      # bundled knowledge base with templated responses.
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      GROQ_MODEL: ${GROQ_MODEL:-llama-3.3-70b-versatile}
+      # Optional non-blocking chat logging. Blank ⇒ disabled.
+      SUPABASE_URL: ${CHATBOT_SUPABASE_URL:-}
+      SUPABASE_KEY: ${CHATBOT_SUPABASE_KEY:-}
+    ports:
+      - "${CHATBOT_PORT:-5005}:5005"
+    networks:
+      - yatrusathi
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - |
+          import sys, urllib.request as u
+          sys.exit(0 if u.urlopen("http://127.0.0.1:5005/health", timeout=4).status < 400 else 1)
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+
   # ───────────────────────────  React frontend  ───────────────────────
   frontend:
     build:
@@ -69,7 +103,9 @@ services:
         # BROWSER, so it must be the host-published backend address — not the
         # `backend` compose hostname.
         VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:${BACKEND_PORT:-8000}/api/}
-        VITE_CHATBOT_URL: ${VITE_CHATBOT_URL:-}
+        # Reached by the user's BROWSER, so it's the host-published chatbot
+        # address — not the `chatbot` compose hostname.
+        VITE_CHATBOT_URL: ${VITE_CHATBOT_URL:-http://localhost:${CHATBOT_PORT:-5005}}
         VITE_SUPABASE_URL: ${VITE_SUPABASE_URL:-}
         VITE_SUPABASE_ANON_KEY: ${VITE_SUPABASE_ANON_KEY:-}
     image: yatrusathi-frontend:${IMAGE_TAG:-local}
@@ -78,6 +114,8 @@ services:
       - "${FRONTEND_PORT:-8080}:80"
     depends_on:
       backend:
+        condition: service_healthy
+      chatbot:
         condition: service_healthy
     networks:
       - yatrusathi

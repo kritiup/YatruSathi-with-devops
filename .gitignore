@@ -54,6 +54,19 @@ frontend/dist/
 */dist/
 coverage/
 
+# ─── Terraform ───────────────────────────────────────────────────────
+# Keep .terraform.lock.hcl and *.tf tracked; ignore state, caches, vars.
+**/.terraform/
+**/.terraform/*
+*.tfstate
+*.tfstate.*
+crash.log
+*.tfvars
+!*.tfvars.example
+override.tf
+override.tf.json
+infra/terraform/backend.tf
+
 # ─── Misc ────────────────────────────────────────────────────────────
 *.bak
 data_backup.json

@@ -1,0 +1,53 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: chatbot
+  labels: { app.kubernetes.io/name: chatbot }
+spec:
+  # Single replica on purpose: Flask-SocketIO threading mode keeps rooms and
+  # per-session history in process memory. Scaling out needs a Redis message
+  # queue + sticky routing first.
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels: { app.kubernetes.io/name: chatbot }
+  template:
+    metadata:
+      labels: { app.kubernetes.io/name: chatbot }
+    spec:
+      containers:
+        - name: chatbot
+          image: chatbot
+          ports:
+            - containerPort: 5005
+          envFrom:
+            - configMapRef: { name: yatrusathi-config }
+          env:
+            - name: SECRET_KEY
+              valueFrom: { secretKeyRef: { name: yatrusathi-app-secrets, key: CHATBOT_SECRET_KEY } }
+            - name: GROQ_API_KEY
+              valueFrom: { secretKeyRef: { name: yatrusathi-app-secrets, key: GROQ_API_KEY } }
+          readinessProbe:
+            httpGet: { path: /health, port: 5005 }
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: { path: /health, port: 5005 }
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          resources:
+            requests: { cpu: 100m, memory: 256Mi }
+            limits: { cpu: "1", memory: 512Mi }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: chatbot
+spec:
+  selector: { app.kubernetes.io/name: chatbot }
+  # Pin a client to the pod for the life of its Socket.IO / SSE connection.
+  sessionAffinity: ClientIP
+  ports:
+    - port: 5005
+      targetPort: 5005

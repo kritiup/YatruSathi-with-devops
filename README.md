@@ -169,15 +169,31 @@ cd -yatruSathiFrontend- && npm run lint && npx tsc --noEmit && npm run build
 
 ---
 
+## Containers
+
+All three services have a Dockerfile and are orchestrated by
+[`docker-compose.yml`](docker-compose.yml):
+
+```bash
+cp .env.example .env      # optional — every value has a default
+docker compose up --build
+# frontend :8080   backend :8000/api/   chatbot :5005
+```
+
+The backend uses SQLite by default and switches to Postgres when `DATABASE_URL`
+is set (compose and Kubernetes both set it).
+
 ## Deployment
 
-- **Backend** — configured for [Render](https://render.com) via
-  [`-yatrubackend-/render.yaml`](-yatrubackend-/render.yaml); `scripts/build.sh`
-  installs deps, collects static and migrates, `scripts/start.sh` migrates, seeds
-  and launches Gunicorn. Note: Render's filesystem is ephemeral, so the SQLite
-  database does not survive a redeploy without a persistent disk.
+- **AWS EKS (primary)** — Terraform in [`infra/terraform/`](infra/terraform) provisions
+  the VPC, EKS cluster, ECR repos, RDS Postgres, Secrets Manager and the GitHub
+  OIDC deploy role; Kustomize manifests in [`k8s/`](k8s) define the workloads and
+  an ALB Ingress. GitHub Actions builds, scans, pushes to ECR and runs
+  `kubectl apply -k` on every push to `main`. Full runbook:
+  [`docs/deployment-eks.md`](docs/deployment-eks.md).
+- **Backend on Render (legacy)** — [`-yatrubackend-/render.yaml`](-yatrubackend-/render.yaml);
+  note Render's filesystem is ephemeral.
 - **Frontend** — `npm run build` emits a static bundle in `dist/` for any static host.
-- **AI service** — any host that can run a Flask/SocketIO app (`threading` async mode).
 
 ---
 

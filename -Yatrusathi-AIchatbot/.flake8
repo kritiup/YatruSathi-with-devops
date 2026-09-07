@@ -1,0 +1,12 @@
+[flake8]
+# CI gates only on real defects (syntax errors, undefined names) via an
+# explicit --select; this file tunes the informational full run.
+max-line-length = 100
+extend-ignore = E203,E501,W503
+exclude =
+    .git,
+    __pycache__,
+    venv,
+    .venv,
+    build,
+    dist

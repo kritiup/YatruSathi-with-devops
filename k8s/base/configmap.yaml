@@ -1,0 +1,23 @@
+# Non-secret runtime config. Secrets (DATABASE_URL, SECRET_KEY, API keys)
+# arrive separately via the ExternalSecret -> `yatrusathi-app-secrets`.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: yatrusathi-config
+data:
+  # ── Django backend ────────────────────────────────────────────────
+  DEBUG: "False"
+  # Behind a single trusted ALB. Narrow this to the real host once known
+  # (overlay patch) — see k8s/overlays/production.
+  ALLOWED_HOSTS: "*"
+  CORS_ALLOWED_ORIGINS: "https://REPLACE_WITH_APP_HOST"
+  CSRF_TRUSTED_ORIGINS: "https://REPLACE_WITH_APP_HOST"
+  # TLS terminates at the ALB; the controller sets X-Forwarded-Proto.
+  SECURE_SSL_REDIRECT: "False"
+  DB_SSL_REQUIRE: "True"
+  WEB_CONCURRENCY: "3"
+  DJANGO_SETTINGS_MODULE: "backend.settings"
+
+  # ── AI chatbot ───────────────────────────────────────────────────
+  GROQ_MODEL: "llama-3.3-70b-versatile"
+  GUNICORN_THREADS: "50"

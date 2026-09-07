@@ -130,19 +130,34 @@ WSGI_APPLICATION = "backend.wsgi.application"
 # Database Configuration
 # https://docs.djangoproject.com/en/6.0/ref/settings/#databases
 #
-# SQLite. The file location can be overridden with SQLITE_PATH; everything
-# else is stored in db.sqlite3 at the project root.
+# Default: SQLite (local dev, tests, CI). Set DATABASE_URL to a full DSN
+# (e.g. postgres://user:pass@host:5432/dbname) to override — the container
+# stack and the Kubernetes deployment always set this to managed Postgres.
+# SQLITE_PATH still relocates the SQLite file when DATABASE_URL is unset.
 
-DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.sqlite3",
-        "NAME": os.getenv("SQLITE_PATH", str(BASE_DIR / "db.sqlite3")),
-        "OPTIONS": {
-            # Wait rather than fail immediately if the file is briefly locked.
-            "timeout": 20,
-        },
+DATABASE_URL = os.getenv("DATABASE_URL", "").strip()
+if DATABASE_URL:
+    import dj_database_url
+
+    DATABASES = {
+        "default": dj_database_url.parse(
+            DATABASE_URL,
+            conn_max_age=int(os.getenv("DB_CONN_MAX_AGE", "600")),
+            conn_health_checks=True,
+            ssl_require=env_bool("DB_SSL_REQUIRE", False),
+        )
     }
-}
+else:
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.sqlite3",
+            "NAME": os.getenv("SQLITE_PATH", str(BASE_DIR / "db.sqlite3")),
+            "OPTIONS": {
+                # Wait rather than fail immediately if the file is briefly locked.
+                "timeout": 20,
+            },
+        }
+    }
 
 
 # Password validation

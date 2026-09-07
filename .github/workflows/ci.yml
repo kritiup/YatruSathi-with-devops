@@ -1,12 +1,14 @@
 name: CI
 
-# Runs on every push and pull request. No deployment here.
+# On every push / PR: build, test and scan all three services.
+# On push to main only: push images to ECR and roll them out to EKS
+# (those two jobs request id-token: write for OIDC — see below).
 on:
   push:
   pull_request:
   workflow_dispatch:
 
-# Least privilege: the pipeline only needs to read the repo. No secrets are used.
+# Default for every job; the publish/deploy jobs widen this themselves.
 permissions:
   contents: read
 
@@ -75,11 +77,43 @@ jobs:
       - name: Tests (pytest)
         run: pytest
 
-  # ── Security: dependency + image scanning (only if frontend/backend pass) ──
+  # ── Chatbot: install → lint (bug-level) → import smoke test ───────────
+  chatbot:
+    name: Chatbot
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./-Yatrusathi-AIchatbot
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13" # matches the chatbot Dockerfile
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install flake8==7.3.0
+
+      # Hard gate: syntax errors and undefined names only. The bundled
+      # knowledge base is large, vendored data-style code — full style
+      # rules run below as a report, not a merge gate.
+      - name: Lint (flake8 — bug-level)
+        run: flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+
+      - name: Lint (flake8 — full, informational)
+        run: flake8 . --count --exit-zero --statistics
+
+      - name: Import smoke test
+        run: python -c "import app, chatbot, knowledge_base"
+
+  # ── Security: dependency + image scanning (only if the app builds pass) ──
   security:
     name: Security scan
     runs-on: ubuntu-latest
-    needs: [frontend, backend]
+    needs: [frontend, backend, chatbot]
     env:
       # Pull Trivy's vuln DB from the ECR mirror — avoids anonymous GHCR rate limits.
       TRIVY_DB_REPOSITORY: public.ecr.aws/aquasecurity/trivy-db:2
@@ -121,3 +155,119 @@ jobs:
           severity: HIGH,CRITICAL
           ignore-unfixed: true
           exit-code: "1"
+
+      - name: Trivy — chatbot image
+        if: ${{ !cancelled() }} # scan regardless of earlier image-scan results
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: yatrusathi-chatbot:local
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+
+  # ── Publish: push images to Amazon ECR ───────────────────────────────
+  # Runs only after frontend + backend + chatbot + security all pass, and
+  # only for pushes to main (never for pull requests — fork PRs cannot get
+  # an OIDC token for this repo). Auth is a short-lived token from GitHub's
+  # OIDC provider assuming an IAM role — no static keys in GitHub Secrets.
+  push-ecr:
+    name: Push to ECR
+    runs-on: ubuntu-latest
+    needs: [security]
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    permissions:
+      contents: read
+      id-token: write # required for OIDC federation
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION || 'ap-south-1' }}
+    outputs:
+      image_tag: ${{ github.sha }}
+    steps:
+      - uses: actions/checkout@v5
+
+      # Rebuild all three images (this job has its own runner). Same build the
+      # security job scanned: compose tags them yatrusathi-<svc>:local.
+      - name: Build images
+        run: docker compose build
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      # Tag every build with the commit SHA (immutable); also move :latest
+      # (this job only runs on main, so :latest always tracks main).
+      - name: Tag and push images
+        env:
+          REGISTRY: ${{ steps.ecr.outputs.registry }}
+          SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          for svc in frontend backend chatbot; do
+            src="yatrusathi-${svc}:local"
+            dst="${REGISTRY}/yatru-sathi-${svc}"
+            docker tag "${src}" "${dst}:${SHA}"
+            docker tag "${src}" "${dst}:latest"
+            docker push "${dst}:${SHA}"
+            docker push "${dst}:latest"
+          done
+
+  # ── Deploy: roll the new images out to EKS ───────────────────────────
+  # Same gating as push-ecr. Assumes the infra in infra/terraform/ is applied
+  # and the deploy role has an EKS access entry (it does — see eks.tf).
+  deploy:
+    name: Deploy to EKS
+    runs-on: ubuntu-latest
+    needs: [push-ecr]
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION || 'ap-south-1' }}
+      EKS_CLUSTER_NAME: ${{ vars.EKS_CLUSTER_NAME || 'yatrusathi' }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Install kubectl + kustomize
+        run: |
+          curl -sSL -o /usr/local/bin/kubectl "https://dl.k8s.io/release/v1.31.3/bin/linux/amd64/kubectl"
+          chmod +x /usr/local/bin/kubectl
+          curl -sSL "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh" | bash -s 5.4.3 /usr/local/bin
+
+      - name: Update kubeconfig
+        run: aws eks update-kubeconfig --name "$EKS_CLUSTER_NAME" --region "$AWS_REGION"
+
+      - name: Point the overlay at the freshly pushed images
+        working-directory: ./k8s/overlays/production
+        env:
+          SHA: ${{ needs.push-ecr.outputs.image_tag }}
+        run: |
+          set -euo pipefail
+          ACCOUNT_ID="$(aws sts get-caller-identity --query Account --output text)"
+          REGISTRY="${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+          kustomize edit set image \
+            "backend=${REGISTRY}/yatru-sathi-backend:${SHA}" \
+            "frontend=${REGISTRY}/yatru-sathi-frontend:${SHA}" \
+            "chatbot=${REGISTRY}/yatru-sathi-chatbot:${SHA}"
+
+      - name: Apply manifests
+        run: kubectl apply -k k8s/overlays/production
+
+      - name: Wait for rollouts
+        run: |
+          set -euo pipefail
+          for d in backend frontend chatbot; do
+            kubectl -n yatrusathi rollout status "deployment/${d}" --timeout=180s
+          done
