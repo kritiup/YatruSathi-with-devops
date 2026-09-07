@@ -1,4 +1,4 @@
-FROM node:22-alpine AS build
+FROM node:26-alpine AS build
 
 WORKDIR /app
 
@@ -24,7 +24,7 @@ RUN npm run build
 
 
 # ───────────────────────────  Serve stage  ──────────────────────────────
-FROM nginx:1.27-alpine AS serve
+FROM nginx:1.31-alpine AS serve
 
 # SPA-aware config: history fallback, asset caching, gzip.
 COPY nginx.conf /etc/nginx/conf.d/default.conf
