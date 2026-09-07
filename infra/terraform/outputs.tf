@@ -29,7 +29,7 @@ output "db_endpoint" {
   value = module.db.db_instance_endpoint
 }
 
-output "app_secret_arn" {
-  description = "Secrets Manager secret the ExternalSecret reads. Set real API keys here."
-  value       = aws_secretsmanager_secret.app.arn
+output "app_secret_arns" {
+  description = "Secrets Manager secrets the ExternalSecrets read. Set real API keys here."
+  value       = { for k, s in aws_secretsmanager_secret.app : k => s.arn }
 }

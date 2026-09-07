@@ -27,9 +27,14 @@ jobs:
         uses: actions/setup-node@v5
         with:
           node-version: "22" # current LTS; matches the frontend Dockerfile build stage
+          cache: npm
+          cache-dependency-path: ./-yatruSathiFrontend-/package-lock.json
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Audit dependencies (informational)
+        run: npm audit --audit-level=high || true
 
       - name: Lint
         run: npm run lint
@@ -61,6 +66,8 @@ jobs:
         uses: actions/setup-python@v6
         with:
           python-version: "3.13" # matches the backend Dockerfile
+          cache: pip
+          cache-dependency-path: ./-yatrubackend-/requirements/*.txt
 
       - name: Install dependencies
         run: pip install -r requirements/dev.txt
@@ -91,6 +98,8 @@ jobs:
         uses: actions/setup-python@v6
         with:
           python-version: "3.13" # matches the chatbot Dockerfile
+          cache: pip
+          cache-dependency-path: ./-Yatrusathi-AIchatbot/requirements.txt
 
       - name: Install dependencies
         run: |
@@ -108,6 +117,39 @@ jobs:
 
       - name: Import smoke test
         run: python -c "import app, chatbot, knowledge_base"
+
+  # ── Secret scan: fail the build if a credential is committed ──────────
+  gitleaks:
+    name: Secret scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0 # full history so new commits on a PR are all scanned
+      - name: gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+
+  # ── Dockerfile lint ─────────────────────────────────────────────────
+  hadolint:
+    name: Dockerfile lint
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        dockerfile:
+          - ./-yatrubackend-/Dockerfile
+          - ./-yatruSathiFrontend-/Dockerfile
+          - ./-Yatrusathi-AIchatbot/Dockerfile
+    steps:
+      - uses: actions/checkout@v5
+      - uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: ${{ matrix.dockerfile }}
+          # DL3008/DL3013: base images here don't pin OS/pip packages by design.
+          ignore: DL3008,DL3013,DL3018
+          failure-threshold: warning
 
   # ── Security: dependency + image scanning (only if the app builds pass) ──
   security:
@@ -217,57 +259,78 @@ jobs:
             docker push "${dst}:latest"
           done
 
-  # ── Deploy: roll the new images out to EKS ───────────────────────────
-  # Same gating as push-ecr. Assumes the infra in infra/terraform/ is applied
-  # and the deploy role has an EKS access entry (it does — see eks.tf).
-  deploy:
-    name: Deploy to EKS
+  # ── Deploy → staging ────────────────────────────────────────────────
+  # Every push to main that got through push-ecr lands in the staging
+  # namespace automatically. Assumes infra/terraform/ is applied and the
+  # deploy role has EKS access entries for both namespaces (see eks.tf).
+  deploy-staging:
+    name: Deploy → staging
     runs-on: ubuntu-latest
     needs: [push-ecr]
     if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     permissions:
       contents: read
       id-token: write
+    environment: staging
     env:
       AWS_REGION: ${{ vars.AWS_REGION || 'ap-south-1' }}
       EKS_CLUSTER_NAME: ${{ vars.EKS_CLUSTER_NAME || 'yatrusathi' }}
+      OVERLAY: k8s/overlays/staging
+      NAMESPACE: yatrusathi-staging
+      ENV_NAME: staging
+      SHA: ${{ github.sha }}
+      APP_HOST: ${{ vars.STAGING_HOST }}
+      VITE_SENTRY_DSN: ${{ vars.VITE_SENTRY_DSN }}
+      VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+      VITE_SUPABASE_ANON_KEY: ${{ vars.VITE_SUPABASE_ANON_KEY }}
     steps:
       - uses: actions/checkout@v5
-
-      - name: Configure AWS credentials (OIDC)
-        uses: aws-actions/configure-aws-credentials@v4
+      - uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
-
       - name: Install kubectl + kustomize
         run: |
           curl -sSL -o /usr/local/bin/kubectl "https://dl.k8s.io/release/v1.31.3/bin/linux/amd64/kubectl"
           chmod +x /usr/local/bin/kubectl
           curl -sSL "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh" | bash -s 5.4.3 /usr/local/bin
+      - name: Deploy
+        run: bash .github/scripts/deploy-eks.sh
 
-      - name: Update kubeconfig
-        run: aws eks update-kubeconfig --name "$EKS_CLUSTER_NAME" --region "$AWS_REGION"
-
-      - name: Point the overlay at the freshly pushed images
-        working-directory: ./k8s/overlays/production
-        env:
-          SHA: ${{ needs.push-ecr.outputs.image_tag }}
+  # ── Deploy → production ────────────────────────────────────────────
+  # Manual promotion only: run the workflow from the Actions tab
+  # (workflow_dispatch). Add required reviewers to the "production"
+  # GitHub Environment to gate it further.
+  deploy-production:
+    name: Deploy → production
+    runs-on: ubuntu-latest
+    needs: [deploy-staging]
+    if: github.event_name == 'workflow_dispatch'
+    permissions:
+      contents: read
+      id-token: write
+    environment: production
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION || 'ap-south-1' }}
+      EKS_CLUSTER_NAME: ${{ vars.EKS_CLUSTER_NAME || 'yatrusathi' }}
+      OVERLAY: k8s/overlays/production
+      NAMESPACE: yatrusathi
+      ENV_NAME: production
+      SHA: ${{ github.sha }}
+      APP_HOST: ${{ vars.PRODUCTION_HOST }}
+      VITE_SENTRY_DSN: ${{ vars.VITE_SENTRY_DSN }}
+      VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+      VITE_SUPABASE_ANON_KEY: ${{ vars.VITE_SUPABASE_ANON_KEY }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+      - name: Install kubectl + kustomize
         run: |
-          set -euo pipefail
-          ACCOUNT_ID="$(aws sts get-caller-identity --query Account --output text)"
-          REGISTRY="${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
-          kustomize edit set image \
-            "backend=${REGISTRY}/yatru-sathi-backend:${SHA}" \
-            "frontend=${REGISTRY}/yatru-sathi-frontend:${SHA}" \
-            "chatbot=${REGISTRY}/yatru-sathi-chatbot:${SHA}"
-
-      - name: Apply manifests
-        run: kubectl apply -k k8s/overlays/production
-
-      - name: Wait for rollouts
-        run: |
-          set -euo pipefail
-          for d in backend frontend chatbot; do
-            kubectl -n yatrusathi rollout status "deployment/${d}" --timeout=180s
-          done
+          curl -sSL -o /usr/local/bin/kubectl "https://dl.k8s.io/release/v1.31.3/bin/linux/amd64/kubectl"
+          chmod +x /usr/local/bin/kubectl
+          curl -sSL "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh" | bash -s 5.4.3 /usr/local/bin
+      - name: Deploy
+        run: bash .github/scripts/deploy-eks.sh

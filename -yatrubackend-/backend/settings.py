@@ -78,6 +78,19 @@ if not DEBUG:
     X_FRAME_OPTIONS = "DENY"
 
 
+# Error tracking — no-op unless SENTRY_DSN is set (safe to leave unset in dev).
+SENTRY_DSN = os.getenv("SENTRY_DSN", "").strip()
+if SENTRY_DSN:
+    import sentry_sdk
+
+    sentry_sdk.init(
+        dsn=SENTRY_DSN,
+        environment=os.getenv("SENTRY_ENVIRONMENT", "production"),
+        traces_sample_rate=float(os.getenv("SENTRY_TRACES_SAMPLE_RATE", "0.0")),
+        send_default_pii=False,
+    )
+
+
 # Application definition
 
 INSTALLED_APPS = [

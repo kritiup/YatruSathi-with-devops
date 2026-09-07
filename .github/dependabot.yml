@@ -1,0 +1,56 @@
+# Dependabot keeps every dependency ecosystem in the monorepo patched.
+# Grouped updates keep the PR volume sane; security updates are never grouped.
+version: 2
+
+updates:
+  # ── Python: backend ────────────────────────────────────────────────
+  - package-ecosystem: pip
+    directory: /-yatrubackend-/requirements
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      backend-python:
+        patterns: ["*"]
+
+  # ── Python: chatbot ───────────────────────────────────────────────
+  - package-ecosystem: pip
+    directory: /-Yatrusathi-AIchatbot
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      chatbot-python:
+        patterns: ["*"]
+
+  # ── JavaScript: frontend ──────────────────────────────────────────
+  - package-ecosystem: npm
+    directory: /-yatruSathiFrontend-
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      frontend-npm:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+
+  # ── GitHub Actions ───────────────────────────────────────────────
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]
+
+  # ── Docker base images ──────────────────────────────────────────
+  - package-ecosystem: docker
+    directories:
+      - /-yatrubackend-
+      - /-yatruSathiFrontend-
+      - /-Yatrusathi-AIchatbot
+    schedule:
+      interval: weekly
+    groups:
+      docker-bases:
+        patterns: ["*"]

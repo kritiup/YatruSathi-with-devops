@@ -77,3 +77,22 @@ resource "helm_release" "external_secrets" {
 
   depends_on = [module.eks]
 }
+
+# ── metrics-server ───────────────────────────────────────────────────────
+# Supplies the pod CPU/memory metrics the HorizontalPodAutoscalers read.
+# Without this the HPAs sit at <unknown> and never scale.
+
+resource "helm_release" "metrics_server" {
+  name       = "metrics-server"
+  repository = "https://kubernetes-sigs.github.io/metrics-server/"
+  chart      = "metrics-server"
+  version    = "3.12.2"
+  namespace  = "kube-system"
+
+  set {
+    name  = "args[0]"
+    value = "--kubelet-insecure-tls" # EKS kubelet serving certs are self-signed
+  }
+
+  depends_on = [module.eks]
+}

@@ -1,0 +1,73 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Staging shares the cluster and the RDS instance with production but runs in
+# its own namespace, off its own Secrets Manager secret (yatrusathi/app-staging,
+# whose DATABASE_URL points at the "<db>_staging" database) and at 1 replica.
+namespace: yatrusathi-staging
+
+resources:
+  - ../../base
+
+# CI rewrites these on each deploy (kustomize edit set image …).
+images:
+  - name: backend
+    newName: <ACCOUNT_ID>.dkr.ecr.<REGION>.amazonaws.com/yatru-sathi-backend
+    newTag: latest
+  - name: frontend
+    newName: <ACCOUNT_ID>.dkr.ecr.<REGION>.amazonaws.com/yatru-sathi-frontend
+    newTag: latest
+  - name: chatbot
+    newName: <ACCOUNT_ID>.dkr.ecr.<REGION>.amazonaws.com/yatru-sathi-chatbot
+    newTag: latest
+
+patches:
+  # Point the ExternalSecret at the staging secret.
+  - target:
+      kind: ExternalSecret
+      name: yatrusathi-app-secrets
+    patch: |
+      - op: replace
+        path: /spec/data
+        value:
+          - { secretKey: DATABASE_URL,          remoteRef: { key: yatrusathi/app-staging, property: DATABASE_URL } }
+          - { secretKey: DJANGO_SECRET_KEY,      remoteRef: { key: yatrusathi/app-staging, property: DJANGO_SECRET_KEY } }
+          - { secretKey: CHATBOT_SECRET_KEY,     remoteRef: { key: yatrusathi/app-staging, property: CHATBOT_SECRET_KEY } }
+          - { secretKey: GROQ_API_KEY,           remoteRef: { key: yatrusathi/app-staging, property: GROQ_API_KEY } }
+          - { secretKey: RESEND_API_KEY,         remoteRef: { key: yatrusathi/app-staging, property: RESEND_API_KEY } }
+          - { secretKey: DJANGO_ADMIN_PASSWORD,  remoteRef: { key: yatrusathi/app-staging, property: DJANGO_ADMIN_PASSWORD } }
+
+  - target:
+      kind: ConfigMap
+      name: yatrusathi-config
+    patch: |
+      - op: replace
+        path: /data/SENTRY_ENVIRONMENT
+        value: staging
+
+  # Own ALB, separate from production (prod uses group.name "yatrusathi").
+  - target:
+      kind: Ingress
+      name: yatrusathi
+    patch: |
+      - op: replace
+        path: /metadata/annotations/alb.ingress.kubernetes.io~1group.name
+        value: yatrusathi-staging
+
+  # One replica of everything; drop the autoscalers.
+  - target: { kind: Deployment, name: backend }
+    patch: |
+      - { op: replace, path: /spec/replicas, value: 1 }
+  - target: { kind: Deployment, name: frontend }
+    patch: |
+      - { op: replace, path: /spec/replicas, value: 1 }
+  - patch: |
+      $patch: delete
+      apiVersion: autoscaling/v2
+      kind: HorizontalPodAutoscaler
+      metadata: { name: backend }
+  - patch: |
+      $patch: delete
+      apiVersion: autoscaling/v2
+      kind: HorizontalPodAutoscaler
+      metadata: { name: frontend }

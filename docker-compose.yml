@@ -40,6 +40,9 @@ services:
       RESEND_FROM_EMAIL: ${RESEND_FROM_EMAIL:-onboarding@resend.dev}
       # Gunicorn worker count.
       WEB_CONCURRENCY: ${WEB_CONCURRENCY:-3}
+      # Error tracking. Blank ⇒ disabled.
+      SENTRY_DSN: ${SENTRY_DSN_BACKEND:-}
+      SENTRY_ENVIRONMENT: ${SENTRY_ENVIRONMENT:-development}
     ports:
       - "${BACKEND_PORT:-8000}:8000"
     volumes:
@@ -77,6 +80,11 @@ services:
       # Optional non-blocking chat logging. Blank ⇒ disabled.
       SUPABASE_URL: ${CHATBOT_SUPABASE_URL:-}
       SUPABASE_KEY: ${CHATBOT_SUPABASE_KEY:-}
+      # Error tracking. Blank ⇒ disabled.
+      SENTRY_DSN: ${SENTRY_DSN_CHATBOT:-}
+      SENTRY_ENVIRONMENT: ${SENTRY_ENVIRONMENT:-development}
+      # Socket.IO message queue. Blank ⇒ single-process rooms.
+      REDIS_URL: ${CHATBOT_REDIS_URL:-}
     ports:
       - "${CHATBOT_PORT:-5005}:5005"
     networks:
@@ -108,6 +116,9 @@ services:
         VITE_CHATBOT_URL: ${VITE_CHATBOT_URL:-http://localhost:${CHATBOT_PORT:-5005}}
         VITE_SUPABASE_URL: ${VITE_SUPABASE_URL:-}
         VITE_SUPABASE_ANON_KEY: ${VITE_SUPABASE_ANON_KEY:-}
+        # Error tracking. Blank ⇒ disabled.
+        VITE_SENTRY_DSN: ${VITE_SENTRY_DSN:-}
+        VITE_SENTRY_ENVIRONMENT: ${SENTRY_ENVIRONMENT:-development}
     image: yatrusathi-frontend:${IMAGE_TAG:-local}
     restart: unless-stopped
     ports:

@@ -19,6 +19,7 @@
     "@emotion/styled": "^11.14.1",
     "@mui/icons-material": "^6.5.0",
     "@mui/material": "^6.5.0",
+    "@sentry/react": "^8.55.2",
     "@supabase/supabase-js": "^2.50.0",
     "axios": "^1.13.3",
     "lucide-react": "^0.562.0",

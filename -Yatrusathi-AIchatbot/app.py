@@ -18,15 +18,30 @@ load_dotenv()
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Error tracking — no-op unless SENTRY_DSN is set.
+_sentry_dsn = os.getenv("SENTRY_DSN", "").strip()
+if _sentry_dsn:
+    import sentry_sdk
+
+    sentry_sdk.init(
+        dsn=_sentry_dsn,
+        environment=os.getenv("SENTRY_ENVIRONMENT", "production"),
+        traces_sample_rate=float(os.getenv("SENTRY_TRACES_SAMPLE_RATE", "0.0")),
+    )
+
 app = Flask(__name__)
 app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", "yatrusathi-secret-2024")
 
 CORS(app, origins="*")
 
+# REDIS_URL wires up a Socket.IO message queue so more than one replica can
+# serve the same rooms. Unset ⇒ single-process in-memory rooms (the default;
+# the Deployment stays at replicas: 1 in that case).
 socketio = SocketIO(
     app,
     cors_allowed_origins="*",
     async_mode="threading",
+    message_queue=os.getenv("REDIS_URL") or None,
     logger=False,
     engineio_logger=False,
 )

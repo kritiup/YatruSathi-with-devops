@@ -21,6 +21,11 @@ module "eks" {
 
   eks_managed_node_group_defaults = {
     ami_type = "AL2023_x86_64_STANDARD"
+    # Lets the CloudWatch agent (Container Insights addon) ship node/pod
+    # metrics and container logs.
+    iam_role_additional_policies = {
+      cloudwatch = "arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy"
+    }
   }
 
   eks_managed_node_groups = {
@@ -33,13 +38,15 @@ module "eks" {
     }
   }
 
-  # Cluster addons. The EBS CSI driver backs any PersistentVolumeClaim.
+  # Cluster addons. The EBS CSI driver backs any PersistentVolumeClaim;
+  # amazon-cloudwatch-observability is Container Insights (metrics + logs).
   cluster_addons = {
-    coredns                = { most_recent = true }
-    kube-proxy             = { most_recent = true }
-    vpc-cni                = { most_recent = true }
-    aws-ebs-csi-driver     = { most_recent = true }
-    eks-pod-identity-agent = { most_recent = true }
+    coredns                         = { most_recent = true }
+    kube-proxy                      = { most_recent = true }
+    vpc-cni                         = { most_recent = true }
+    aws-ebs-csi-driver              = { most_recent = true }
+    eks-pod-identity-agent          = { most_recent = true }
+    amazon-cloudwatch-observability = { most_recent = true }
   }
 
   # API-based auth (no aws-auth ConfigMap juggling).
@@ -48,7 +55,7 @@ module "eks" {
 
   access_entries = merge(
     {
-      # The GitHub Actions deploy role — namespace-scoped edit rights.
+      # The GitHub Actions deploy role — edit rights on the app namespaces only.
       github_ci = {
         principal_arn = module.github_deploy_role.arn
         policy_associations = {
@@ -56,7 +63,7 @@ module "eks" {
             policy_arn = "arn:aws:eks::aws:cluster-access-policy/AmazonEKSEditPolicy"
             access_scope = {
               type       = "namespace"
-              namespaces = [var.app_namespace]
+              namespaces = [var.app_namespace, "${var.app_namespace}-staging"]
             }
           }
         }

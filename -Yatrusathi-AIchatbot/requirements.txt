@@ -16,5 +16,11 @@ python-dotenv==1.2.2
 # ── Optional non-blocking chat logging ──────────────────────────────
 supabase==2.28.0
 
+# ── Error tracking (inert unless SENTRY_DSN is set) ─────────────────
+sentry-sdk==2.18.0
+
 # ── Production WSGI server (matches the backend's gunicorn pin) ──────
 gunicorn==25.1.0
+
+# ── Optional Socket.IO message queue (set REDIS_URL to scale past 1 pod) ──
+redis==5.2.1

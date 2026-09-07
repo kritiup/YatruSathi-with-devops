@@ -21,3 +21,11 @@ data:
   # ── AI chatbot ───────────────────────────────────────────────────
   GROQ_MODEL: "llama-3.3-70b-versatile"
   GUNICORN_THREADS: "50"
+  # Set to a redis:// URL (e.g. ElastiCache) to run chatbot with >1 replica.
+  REDIS_URL: ""
+
+  # ── Error tracking (backend + chatbot) ──────────────────────────
+  # A Sentry DSN is not a credential (it only permits sending events).
+  # Blank ⇒ disabled; set the real DSN(s) here per environment.
+  SENTRY_DSN: ""
+  SENTRY_ENVIRONMENT: "production"

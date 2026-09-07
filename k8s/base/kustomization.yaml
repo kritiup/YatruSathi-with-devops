@@ -4,7 +4,8 @@ kind: Kustomization
 namespace: yatrusathi
 
 resources:
-  - namespace.yaml
+  # The namespace itself is created by Terraform (kubernetes_namespace) so the
+  # namespace-scoped CI deploy role never needs cluster-level create rights.
   - configmap.yaml
   - externalsecret.yaml
   - backend.yaml

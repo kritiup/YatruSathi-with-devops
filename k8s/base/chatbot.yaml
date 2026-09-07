@@ -5,8 +5,9 @@ metadata:
   labels: { app.kubernetes.io/name: chatbot }
 spec:
   # Single replica on purpose: Flask-SocketIO threading mode keeps rooms and
-  # per-session history in process memory. Scaling out needs a Redis message
-  # queue + sticky routing first.
+  # per-session history in process memory. To scale out, set REDIS_URL in the
+  # ConfigMap (Socket.IO message queue) and raise this — the Service already
+  # pins clients with sessionAffinity: ClientIP.
   replicas: 1
   strategy:
     type: Recreate

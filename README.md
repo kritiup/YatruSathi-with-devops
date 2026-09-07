@@ -183,14 +183,27 @@ docker compose up --build
 The backend uses SQLite by default and switches to Postgres when `DATABASE_URL`
 is set (compose and Kubernetes both set it).
 
+## CI/CD
+
+`.github/workflows/ci.yml` on every push / PR: build + test + lint all three
+services, `gitleaks` secret scan, `hadolint` Dockerfile lint, Trivy dependency +
+image scans. `.github/workflows/codeql.yml` runs CodeQL for Python and JS/TS.
+Dependabot ([.github/dependabot.yml](.github/dependabot.yml)) keeps pip, npm,
+GitHub Actions and Docker base images patched.
+
+On push to `main`: push images to ECR (OIDC, no static keys) → deploy to the
+**staging** namespace. Production is a **manual** promotion (`workflow_dispatch`),
+optionally gated by the `production` GitHub Environment.
+
 ## Deployment
 
 - **AWS EKS (primary)** — Terraform in [`infra/terraform/`](infra/terraform) provisions
-  the VPC, EKS cluster, ECR repos, RDS Postgres, Secrets Manager and the GitHub
-  OIDC deploy role; Kustomize manifests in [`k8s/`](k8s) define the workloads and
-  an ALB Ingress. GitHub Actions builds, scans, pushes to ECR and runs
-  `kubectl apply -k` on every push to `main`. Full runbook:
-  [`docs/deployment-eks.md`](docs/deployment-eks.md).
+  the VPC, EKS cluster (+ Container Insights, metrics-server), ECR repos, RDS
+  Postgres, per-environment Secrets Manager secrets and the GitHub OIDC deploy
+  role. Kustomize [`k8s/base`](k8s/base) + `overlays/{staging,production}` define
+  the workloads, HPAs and an ALB Ingress. Full runbook:
+  [`docs/deployment-eks.md`](docs/deployment-eks.md); secret handling:
+  [`docs/secret-rotation.md`](docs/secret-rotation.md).
 - **Backend on Render (legacy)** — [`-yatrubackend-/render.yaml`](-yatrubackend-/render.yaml);
   note Render's filesystem is ephemeral.
 - **Frontend** — `npm run build` emits a static bundle in `dist/` for any static host.
