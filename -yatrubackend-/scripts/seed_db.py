@@ -1,154 +1,149 @@
+"""Seed the database. Safe to run on every container start.
+
+Called by ``docker-entrypoint.sh`` and ``scripts/start.sh``, so it must be
+idempotent and must never create credentials in production.
+
+Two separate things happen here:
+
+1. **Catalogue content** — destinations, activity types, activities and
+   packages — via the ``seed_catalog`` management command. Only on an empty
+   catalogue, so re-running it never reverts edits made through the admin.
+   Set ``SEED_FORCE=1`` to re-apply it over existing rows.
+
+2. **Demo users, bookings and reviews** — opt-in, local only. Requires
+   ``SEED_DEMO_DATA=1`` *and* ``DEBUG=True``; it refuses to create accounts
+   when ``DEBUG=False`` so a production pod can never seed logins.
+
+The admin panel is not seeded here at all: it authenticates against the
+ADMIN_EMAIL / ADMIN_PASSWORD environment variables (see
+``event/api/admin_login.py``) and needs no database row.
+
+    python scripts/seed_db.py
+"""
+
 import os
-import django
 import random
 import sys
-from datetime import datetime, timedelta
-from django.utils import timezone
-from django.core.management import call_command
 
-# Setup Django environment
+import django
+
 sys.path.insert(0, os.getcwd())
-os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'backend.settings')
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "backend.settings")
 django.setup()
 
-from django.contrib.auth.models import User
-from event.models import Event, Profile, Booking, Review, Notification
+from django.conf import settings  # noqa: E402
+from django.contrib.auth.models import User  # noqa: E402
+from django.core.management import call_command  # noqa: E402
 
-def seed_data():
-    # Check if we already have events to avoid redundant seeding
-    if Event.objects.exists():
-        print("ℹ️ Database already contains events. Skipping seeding.")
+from event.models import Activity, Booking, Destination, Profile, Review  # noqa: E402
+
+DEMO_USERNAMES = [
+    "trekker_nepal",
+    "adventure_seeker",
+    "culture_buff",
+    "himalayan_guide",
+    "travel_guru",
+]
+
+DEMO_COMMENTS = [
+    "Incredible experience — the guides really knew the trails.",
+    "Well organised from start to finish. Would book again.",
+    "Tough going in places, but the views more than made up for it.",
+    "Great group, great food, unforgettable scenery.",
+]
+
+
+def env_bool(name, default=False):
+    """Read a boolean from the environment, accepting the usual spellings."""
+    return os.getenv(name, str(default)).strip().lower() in ("1", "true", "yes", "on")
+
+
+def seed_catalogue():
+    """Load the browse catalogue, unless it is already populated."""
+    if Destination.objects.exists() and not env_bool("SEED_FORCE"):
+        print("ℹ️  Catalogue already seeded — skipping (SEED_FORCE=1 to re-apply).")
         return
 
-    print("🌱 Starting database seeding...")
-    
-    # Try to load from seed.json first if it exists
-    seed_file = os.path.join('data', 'seed.json')
-    if os.path.exists(seed_file):
-        print(f"📦 Loading initial data from {seed_file}...")
-        try:
-            call_command('loaddata', seed_file)
-            print("✅ Initial data loaded.")
-        except Exception as e:
-            print(f"⚠️ Error loading seed.json: {e}")
+    print("🌱 Seeding catalogue...")
+    call_command("seed_catalog")
 
-    # Proceed with professional seeding
-    # 1. Ensure admin user
-    admin_user, created = User.objects.get_or_create(
-        username='admin',
-        defaults={
-            'email': 'admin@yatrusathi.com',
-            'is_staff': True,
-            'is_superuser': True,
-        }
-    )
-    if created:
-        admin_user.set_password('admin123')
-        admin_user.save()
-        Profile.objects.get_or_create(user=admin_user, defaults={'bio': 'System Administrator'})
-        print("✅ Created admin user")
 
-    # 2. Create Sample Users
-    usernames = ['trekker_nepal', 'adventure_seeker', 'culture_buff', 'himalayan_guide', 'travel_guru']
+def seed_demo_data():
+    """Create demo logins plus a few bookings and reviews. Local only."""
+    if not env_bool("SEED_DEMO_DATA"):
+        return
+
+    if not settings.DEBUG:
+        print(
+            "⚠️  SEED_DEMO_DATA is set but DEBUG=False — refusing to create demo "
+            "accounts outside local development."
+        )
+        return
+
+    password = os.getenv("SEED_DEMO_PASSWORD", "demo-password-change-me")
+
     users = []
-    for uname in usernames:
+    for username in DEMO_USERNAMES:
+        first, _, last = username.partition("_")
         user, created = User.objects.get_or_create(
-            username=uname,
+            username=username,
             defaults={
-                'email': f"{uname}@example.com",
-                'first_name': uname.split('_')[0].capitalize(),
-                'last_name': uname.split('_')[1].capitalize() if '_' in uname else 'User'
-            }
+                "email": f"{username}@example.com",
+                "first_name": first.capitalize(),
+                "last_name": last.capitalize() or "User",
+            },
         )
         if created:
-            user.set_password('password123')
-            user.save()
-            Profile.objects.get_or_create(user=user, defaults={'bio': f"Hi, I'm {user.first_name}, a passionate traveler exploring Nepal!"})
-        users.append(user)
-    print(f"✅ Users ready: {len(users)}")
-
-    # 3. Professional Event Data
-    event_data = [
-        {
-            'title': 'Annapurna Circuit Expedition',
-            'description': 'A legendary trek through the heart of the Himalayas. Experience diverse landscapes, from lush sub-tropical forests to alpine meadows and high-altitude deserts.',
-            'category': 'Trekking',
-            'location': 'Annapurna Region',
-            'image': 'event_images/Manang.jpg',
-            'tags': 'Adventure, Trekking, Mountains',
-            'ticket_price': 1200.00,
-            'organizer_name': 'Himalayan Adventures'
-        },
-        {
-            'title': 'Kathmandu Heritage Walk',
-            'description': 'Explore the ancient temples, stupas, and palaces of the Kathmandu Valley. A journey through centuries of art, culture, and spirituality.',
-            'category': 'Cultural',
-            'location': 'Kathmandu',
-            'image': 'event_images/Kathmandu.jpg',
-            'tags': 'Culture, History, Temples',
-            'ticket_price': 45.00,
-            'organizer_name': 'Heritage Nepal'
-        },
-        {
-            'title': 'Chitwan Wildlife Safari',
-            'description': 'Get close to one-horned rhinos, Bengal tigers, and diverse bird species in the lush jungles of Chitwan National Park.',
-            'category': 'Wildlife',
-            'location': 'Chitwan',
-            'image': 'event_images/image-03.jpg',
-            'tags': 'Nature, Animals, Safari',
-            'ticket_price': 150.00,
-            'organizer_name': 'Jungle Trails'
-        },
-        {
-            'title': 'Everest Base Camp Trek',
-            'description': 'Join us for an unforgettable journey to Everest Base Camp. Experience breathtaking mountain views and immerse yourself in Sherpa culture.',
-            'location': 'Everest Region, Nepal',
-            'category': 'Trekking',
-            'image': 'event_images/Everest.jpg',
-            'ticket_price': 2500.00,
-            'organizer_name': 'Peak Pursuits'
-        },
-    ]
-
-    created_events = []
-    for data in event_data:
-        event, created = Event.objects.get_or_create(
-            title=data['title'],
-            defaults={
-                'description': data['description'],
-                'category': data.get('category', 'Adventure'),
-                'location': data['location'],
-                'image': data['image'],
-                'tags': data.get('tags', 'Nepal, Travel'),
-                'ticket_price': data.get('ticket_price', 0.00),
-                'is_free_event': data.get('ticket_price', 0) == 0,
-                'organizer_name': data.get('organizer_name', 'Local Nepal Guides'),
-                'date': timezone.now() + timedelta(days=random.randint(5, 60)),
-                'created_by': admin_user
-            }
-        )
-        created_events.append(event)
-    print(f"✅ Events ready: {len(created_events)}")
-
-    # 4. Create Bookings and Reviews
-    for user in users:
-        for event in random.sample(created_events, k=random.randint(1, len(created_events))):
-            Booking.objects.get_or_create(
+            user.set_password(password)
+            user.save(update_fields=["password"])
+            Profile.objects.get_or_create(
                 user=user,
-                event=event,
-                defaults={'status': 'confirmed', 'ticket_count': random.randint(1, 2)}
+                defaults={
+                    "bio": f"Hi, I'm {user.first_name}, exploring Nepal one trail "
+                    "at a time!"
+                },
             )
-            if random.random() > 0.4:
-                Review.objects.get_or_create(
+        users.append(user)
+    print(f"✅ Demo users ready: {len(users)} (password: {password!r})")
+
+    activities = list(Activity.objects.all()[:10])
+    if not activities:
+        print("ℹ️  No activities to book against — skipping bookings and reviews.")
+        return
+
+    # Seeded RNG so repeated runs produce the same spread rather than slowly
+    # booking every user onto every activity.
+    rng = random.Random(20260909)
+    bookings = reviews = 0
+    for user in users:
+        chosen = rng.sample(activities, k=min(len(activities), rng.randint(1, 3)))
+        for activity in chosen:
+            _, created = Booking.objects.get_or_create(
+                user=user,
+                activity=activity,
+                defaults={"status": "confirmed", "ticket_count": rng.randint(1, 2)},
+            )
+            bookings += int(created)
+
+            if rng.random() <= 0.6:
+                _, created = Review.objects.get_or_create(
                     user=user,
-                    event=event,
+                    activity=activity,
+                    rated_user=None,
                     defaults={
-                        'rating': random.randint(4, 5),
-                        'comment': "Incredible experience! Highly recommend."
-                    }
+                        "rating": rng.randint(4, 5),
+                        "comment": rng.choice(DEMO_COMMENTS),
+                    },
                 )
-    print("✅ Bookings and Reviews seeded.")
-    print("\n🎉 Database seeding completed successfully!")
+                reviews += int(created)
+    print(f"✅ Demo bookings created: {bookings}, reviews created: {reviews}")
+
+
+def seed_data():
+    seed_catalogue()
+    seed_demo_data()
+    print("🎉 Seeding complete.")
+
 
 if __name__ == "__main__":
     seed_data()

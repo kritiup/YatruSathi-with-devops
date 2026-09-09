@@ -8,7 +8,7 @@ from rest_framework.decorators import (
 )
 from rest_framework.response import Response
 
-from ..models import EmailOTP
+from ..models import EmailOTP, Profile
 from ..repositories.user_repository import UserRepository
 from ..services.auth_service import AuthService
 
@@ -27,7 +27,24 @@ def forgot_password_request_otp_api(request):
     user = user_repo.get_by_email(email)
     if not user:
         return Response({"error": "User not found"}, status=status.HTTP_404_NOT_FOUND)
-    AuthService()._create_email_otp(user)
+    if not user.email:
+        return Response(
+            {"error": "This account has no email address on file."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    # `_create_email_otp` returns False when no transport accepted the message.
+    # Reporting success anyway leaves the user waiting for a code that will
+    # never arrive, with nothing to act on.
+    if not AuthService()._create_email_otp(user):
+        return Response(
+            {
+                "error": (
+                    "We could not send the verification code. Please try again "
+                    "in a moment, or contact support if the problem persists."
+                )
+            },
+            status=status.HTTP_502_BAD_GATEWAY,
+        )
     return Response({"message": "OTP sent to your email"}, status=status.HTTP_200_OK)
 
 
@@ -76,10 +93,13 @@ def forgot_password_verify_otp_api(request):
         )
     otp.is_used = True
     otp.save(update_fields=["is_used"])
-    # Generate a short-lived reset token (for demo, use a random string)
+    # The token is stored on the profile, so a user without one cannot complete
+    # the reset. Create it rather than raising RelatedObjectDoesNotExist here
+    # (step 3 already guards with hasattr; this is the matching guard).
+    profile, _ = Profile.objects.get_or_create(user=user)
     reset_token = secrets.token_urlsafe(32)
-    user.profile.password_reset_token = reset_token
-    user.profile.save(update_fields=["password_reset_token"])
+    profile.password_reset_token = reset_token
+    profile.save(update_fields=["password_reset_token"])
     return Response({"reset_token": reset_token}, status=status.HTTP_200_OK)
 
 

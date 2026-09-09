@@ -12,7 +12,9 @@ https://docs.djangoproject.com/en/6.0/ref/settings/
 
 import os
 from pathlib import Path
+from urllib.parse import quote
 
+import dj_database_url
 from django.core.exceptions import ImproperlyConfigured
 from dotenv import load_dotenv
 
@@ -143,34 +145,61 @@ WSGI_APPLICATION = "backend.wsgi.application"
 # Database Configuration
 # https://docs.djangoproject.com/en/6.0/ref/settings/#databases
 #
-# Default: SQLite (local dev, tests, CI). Set DATABASE_URL to a full DSN
-# (e.g. postgres://user:pass@host:5432/dbname) to override — the container
-# stack and the Kubernetes deployment always set this to managed Postgres.
-# SQLITE_PATH still relocates the SQLite file when DATABASE_URL is unset.
+# PostgreSQL is the only supported engine — it is the data tier of the
+# three-tier stack (React SPA -> Django API -> Postgres) and is the same
+# engine everywhere: docker-compose runs the `db` service, Kubernetes points
+# at managed RDS, and CI runs a Postgres service container.
+#
+# Configure it either way:
+#   DATABASE_URL=postgres://user:pass@host:5432/dbname   (preferred; one DSN)
+#   POSTGRES_HOST/POSTGRES_DB/POSTGRES_USER/POSTGRES_PASSWORD/POSTGRES_PORT
+#
+# There is deliberately no local-file fallback: a misconfigured database must
+# fail loudly at startup rather than silently writing to throwaway storage.
 
-DATABASE_URL = os.getenv("DATABASE_URL", "").strip()
-if DATABASE_URL:
-    import dj_database_url
 
-    DATABASES = {
-        "default": dj_database_url.parse(
-            DATABASE_URL,
-            conn_max_age=int(os.getenv("DB_CONN_MAX_AGE", "600")),
-            conn_health_checks=True,
-            ssl_require=env_bool("DB_SSL_REQUIRE", False),
-        )
-    }
-else:
-    DATABASES = {
-        "default": {
-            "ENGINE": "django.db.backends.sqlite3",
-            "NAME": os.getenv("SQLITE_PATH", str(BASE_DIR / "db.sqlite3")),
-            "OPTIONS": {
-                # Wait rather than fail immediately if the file is briefly locked.
-                "timeout": 20,
-            },
-        }
-    }
+def _database_url_from_parts():
+    """Assemble a DSN from the discrete POSTGRES_* variables, or return ''."""
+    host = os.getenv("POSTGRES_HOST", "").strip()
+    if not host:
+        return ""
+    user = quote(os.getenv("POSTGRES_USER", "postgres"), safe="")
+    password = quote(os.getenv("POSTGRES_PASSWORD", ""), safe="")
+    port = os.getenv("POSTGRES_PORT", "5432").strip()
+    name = os.getenv("POSTGRES_DB", "yatrusathi").strip()
+    credentials = f"{user}:{password}@" if password else f"{user}@"
+    return f"postgres://{credentials}{host}:{port}/{name}"
+
+
+DATABASE_URL = os.getenv("DATABASE_URL", "").strip() or _database_url_from_parts()
+
+if not DATABASE_URL:
+    raise ImproperlyConfigured(
+        "No database configured. YatruSathi requires PostgreSQL — set either\n"
+        "  DATABASE_URL=postgres://user:password@host:5432/dbname\n"
+        "or the discrete POSTGRES_HOST / POSTGRES_DB / POSTGRES_USER /\n"
+        "POSTGRES_PASSWORD variables. For a local database, `docker compose up db`\n"
+        "starts one and .env.example lists the matching values."
+    )
+
+DATABASES = {
+    "default": dj_database_url.parse(
+        DATABASE_URL,
+        # Reuse connections across requests — establishing a Postgres
+        # connection is expensive enough to matter per-request. Each Gunicorn
+        # worker holds one, so watch the server's max_connections when
+        # scaling replicas.
+        conn_max_age=int(os.getenv("DB_CONN_MAX_AGE", "600")),
+        conn_health_checks=True,
+        ssl_require=env_bool("DB_SSL_REQUIRE", False),
+    )
+}
+
+if DATABASES["default"].get("ENGINE") != "django.db.backends.postgresql":
+    raise ImproperlyConfigured(
+        "DATABASE_URL must point at PostgreSQL "
+        f"(got engine {DATABASES['default'].get('ENGINE')!r})."
+    )
 
 
 # Password validation
@@ -244,19 +273,31 @@ RESEND_API_KEY = os.getenv("RESEND_API_KEY")
 RESEND_FROM_EMAIL = os.getenv("RESEND_FROM_EMAIL", "onboarding@resend.dev")
 
 # Choose the backend explicitly with EMAIL_BACKEND; otherwise use real SMTP
-# only when it's actually configured (host password or Resend key present),
-# and fall back to printing emails to the console in local development.
-_smtp_configured = bool(os.getenv("EMAIL_HOST_PASSWORD") or RESEND_API_KEY)
+# only when SMTP itself is configured, and fall back to printing emails to the
+# console in local development.
+#
+# RESEND_API_KEY deliberately does NOT count here. Resend is called over its
+# HTTP API (see event/services/auth_service.py), not SMTP, so treating the key
+# as "SMTP is configured" pointed the fallback at smtp.gmail.com with no
+# credentials — turning a recoverable Resend failure into a slow SMTP timeout
+# and then a hard failure, instead of a visible console email.
+# The console backend is a local-development convenience only. In production it
+# would "accept" every message and drop it on stdout, so the OTP endpoints would
+# report success for mail nobody receives — worse than a visible failure.
+_smtp_configured = bool(os.getenv("EMAIL_HOST_PASSWORD"))
 EMAIL_BACKEND = os.getenv(
     "EMAIL_BACKEND",
     (
         "django.core.mail.backends.smtp.EmailBackend"
-        if _smtp_configured
+        if _smtp_configured or not DEBUG
         else "django.core.mail.backends.console.EmailBackend"
     ),
 )
 EMAIL_HOST = os.getenv("EMAIL_HOST", "smtp.gmail.com")
 EMAIL_PORT = int(os.getenv("EMAIL_PORT", "587"))
+# Bound the SMTP fallback. Without this an unreachable or unconfigured mail host
+# blocks the request thread until the OS gives up.
+EMAIL_TIMEOUT = int(os.getenv("EMAIL_TIMEOUT", "10"))
 EMAIL_USE_TLS = os.getenv("EMAIL_USE_TLS", "True") == "True"
 EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER")
 EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD")

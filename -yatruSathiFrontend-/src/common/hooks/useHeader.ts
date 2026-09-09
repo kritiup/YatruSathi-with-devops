@@ -15,8 +15,8 @@ interface ChatGroupLike {
  * sidebar): the current user, their avatar, unread badge counts, and the
  * login / logout navigation helpers.
  *
- * Counts refresh on every route change — there is no realtime channel any
- * more now that the backend runs on SQLite.
+ * Counts refresh on every route change — the backend owns this data in
+ * Postgres and exposes no realtime channel, so there is nothing to subscribe to.
  */
 export function useHeader() {
   const navigate = useNavigate();

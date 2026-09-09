@@ -8,10 +8,10 @@ services:
     branch: main # Deploy from main branch
     buildCommand: 'scripts/build.sh'
     startCommand: 'scripts/start.sh'
-    # NOTE: the app uses SQLite (db.sqlite3). Render's filesystem is ephemeral,
-    # so data does not survive a deploy/restart. Attach a persistent disk
-    # (mount at the repo root) or move back to a managed Postgres before
-    # relying on this in production.
+    # NOTE: the app requires PostgreSQL and will not start without it. Add a
+    # Render PostgreSQL instance (or any managed Postgres) and set DATABASE_URL
+    # below from its connection string — Render's filesystem is ephemeral, and
+    # there is no local-file fallback.
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.7
@@ -21,4 +21,10 @@ services:
         generateValue: true
       - key: ALLOWED_HOSTS
         value: .onrender.com
+      # Required. Point at a managed Postgres; sync:false keeps the DSN out of
+      # this file — set the value in the Render dashboard.
+      - key: DATABASE_URL
+        sync: false
+      - key: DB_SSL_REQUIRE
+        value: True
     autoDeploy: true # Auto-deploy on git push

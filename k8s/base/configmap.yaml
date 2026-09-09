@@ -17,6 +17,14 @@ data:
   DB_SSL_REQUIRE: "True"
   WEB_CONCURRENCY: "3"
   DJANGO_SETTINGS_MODULE: "backend.settings"
+  # Outbound email (OTP + password reset). The API key itself is a secret and
+  # arrives via the ExternalSecret; the sender address is not.
+  #
+  # This MUST be an address on a domain verified at https://resend.com/domains.
+  # Resend's sandbox sender (onboarding@resend.dev) is refused for every
+  # recipient except the API key owner, which breaks password reset for real
+  # users. `manage.py check --deploy` warns if this is left at the sandbox value.
+  RESEND_FROM_EMAIL: "no-reply@REPLACE_WITH_VERIFIED_DOMAIN"
 
   # ── AI chatbot ───────────────────────────────────────────────────
   GROQ_MODEL: "llama-3.3-70b-versatile"

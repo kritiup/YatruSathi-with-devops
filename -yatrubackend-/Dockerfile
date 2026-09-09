@@ -34,12 +34,15 @@ WORKDIR /app
 COPY --from=builder /opt/venv /opt/venv
 COPY . .
 
-# Runtime-writable dirs. `data/` and `media/` are mount points for volumes in
-# docker-compose; creating them here (owned by app) means a fresh named volume
-# inherits writable ownership instead of coming up root-owned.
+# Runtime-writable dirs. `media/` is a volume mount point in docker-compose;
+# creating it here (owned by app) means a fresh named volume inherits writable
+# ownership instead of coming up root-owned. collectstatic never opens a
+# connection, so the DSN below only has to satisfy settings validation.
 RUN chmod +x docker-entrypoint.sh scripts/*.sh \
-    && mkdir -p data media logs staticfiles \
-    && SECRET_KEY=build-only DEBUG=False python manage.py collectstatic --no-input \
+    && mkdir -p media logs staticfiles \
+    && SECRET_KEY=build-only DEBUG=False \
+       DATABASE_URL=postgres://build:build@127.0.0.1:5432/build \
+       python manage.py collectstatic --no-input \
     && chown -R app:app /app
 
 USER app

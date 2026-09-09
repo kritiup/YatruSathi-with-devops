@@ -27,6 +27,8 @@ ENV/
 !.env.example
 
 # ─── Local data & generated artifacts (provided via volumes at runtime) ──
+# The legacy SQLite file is never shipped: the app runs on Postgres, and the
+# file is only an input to scripts/import_from_sqlite.sh, run outside the image.
 db.sqlite3
 db.sqlite3-journal
 media/

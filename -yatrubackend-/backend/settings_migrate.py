@@ -1,27 +1,38 @@
-"""Throwaway settings for a one-off Postgres -> SQLite data copy.
+"""Throwaway settings for the one-off SQLite -> Postgres data copy.
 
-Adds a second database alias `pg` pointing at the Supabase Postgres given by
-the SUPABASE_DB_URL environment variable, while `default` stays the normal
-SQLite database. Use it only with the export commands in
-`scripts/copy_from_supabase.sh`; it is not for running the app.
+`default` stays the normal Postgres database configured by DATABASE_URL, and
+this adds a second alias `sqlite` pointing at the legacy `db.sqlite3` file that
+the app used before the move to Postgres.
+
+Use it only with `scripts/import_from_sqlite.sh`; it is not for running the app.
 """
 
 import os
-
-import dj_database_url
+from pathlib import Path
 
 from .settings import *  # noqa: F401,F403
-from .settings import DATABASES
+from .settings import BASE_DIR, DATABASES
 
-_url = os.environ.get("SUPABASE_DB_URL")
-if not _url:
+_path = os.environ.get("LEGACY_SQLITE_PATH", str(BASE_DIR / "db.sqlite3"))
+if not Path(_path).is_file():
     raise RuntimeError(
-        "SUPABASE_DB_URL is not set. Example:\n"
-        "  export SUPABASE_DB_URL="
-        "'postgresql://postgres:PASSWORD@db.jdgzbxycotncnwxusqxy.supabase.co:5432/postgres'"
+        f"No SQLite database at {_path}. Point LEGACY_SQLITE_PATH at the old "
+        "db.sqlite3 file, for example:\n"
+        "  export LEGACY_SQLITE_PATH=/path/to/db.sqlite3"
     )
 
-DATABASES["pg"] = dj_database_url.parse(_url, conn_max_age=0)
-DATABASES["pg"].setdefault("OPTIONS", {})
-DATABASES["pg"]["OPTIONS"]["sslmode"] = "require"
-DATABASES["pg"]["OPTIONS"]["connect_timeout"] = 15
+DATABASES["sqlite"] = {
+    "ENGINE": "django.db.backends.sqlite3",
+    "NAME": _path,
+    "OPTIONS": {"timeout": 20},
+    # Read-only export; no long-lived connection needed.
+    "CONN_MAX_AGE": 0,
+    "ATOMIC_REQUESTS": False,
+    "AUTOCOMMIT": True,
+    "TIME_ZONE": None,
+    "USER": "",
+    "PASSWORD": "",
+    "HOST": "",
+    "PORT": "",
+    "TEST": {},
+}

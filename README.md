@@ -8,7 +8,7 @@ This repository is a workspace of three independently deployable services:
 
 | Directory | Service | Stack |
 | --- | --- | --- |
-| [`-yatrubackend-/`](-yatrubackend-) | REST API & data model | Django 6, Django REST Framework, SQLite |
+| [`-yatrubackend-/`](-yatrubackend-) | REST API & data model | Django 6, Django REST Framework, PostgreSQL 16 |
 | [`-yatruSathiFrontend-/`](-yatruSathiFrontend-) | Web client | React 19, TypeScript, Vite 7, MUI 6 |
 | [`-Yatrusathi-AIchatbot/`](-Yatrusathi-AIchatbot) | AI assistant & real‑time chat | Flask, Flask‑SocketIO, Groq (Llama 3.3 70B) |
 
@@ -16,13 +16,24 @@ This repository is a workspace of three independently deployable services:
 
 ## Architecture
 
+A classic **three‑tier** application, with an AI side‑car alongside the
+application tier:
+
+| Tier | Component | Runs as |
+| --- | --- | --- |
+| Presentation | React SPA (static bundle) | nginx container / CDN |
+| Application | Django REST API | Gunicorn container |
+| Data | PostgreSQL 16 | `db` container locally, Amazon RDS on EKS |
+
+Only the application tier reaches the database — the browser never does.
+
 ```mermaid
 flowchart LR
     User((User)) --> FE[React SPA<br/>Vite / MUI]
     FE -- REST + Token auth --> BE[Django REST API]
     FE -- REST / SSE stream --> AI[Flask AI service]
     FE -- Socket.IO --> AI
-    BE --> DB[(SQLite)]
+    BE -- psycopg --> DB[(PostgreSQL)]
     AI -- RAG --> KB[knowledge_base.py]
     AI -- LLM --> GROQ[Groq Cloud]
     AI -. optional logging .-> SB[(Supabase)]
@@ -33,6 +44,9 @@ flowchart LR
   and the Flask service for AI replies and live chat sockets.
 - The **backend** owns the domain model and authentication. It uses DRF token
   authentication for users and a separate JWT scheme for admins.
+- The **database** is PostgreSQL, reachable only from the backend. It is the
+  single source of truth for persistent state; the API containers stay stateless
+  so they can be scaled and replaced freely.
 - The **AI service** is stateless apart from short‑lived in‑memory session history.
   It answers with Retrieval‑Augmented Generation over a bundled Nepal travel
   knowledge base, falling back to templated answers when no Groq key is configured.
@@ -43,6 +57,7 @@ flowchart LR
 
 - **Python 3.11** (backend and AI service)
 - **Node.js 20+** and npm (frontend)
+- **PostgreSQL 16** (backend) — or just Docker, and use `docker compose up db`
 - A free [Groq API key](https://console.groq.com/keys) for live AI responses (optional)
 
 ---
@@ -106,7 +121,26 @@ Each service reads its own `.env`. Never commit real secrets — every `.env` is
 | `BACKEND_URL` | Public base URL, used to build absolute media URLs. |
 | `RESEND_API_KEY` / `RESEND_FROM_EMAIL` | Transactional email (OTP). SMTP vars are the dev fallback. |
 
-Storage is SQLite (`db.sqlite3` at the repo root); no database server to run.
+### Database (`-yatrubackend-/.env`)
+
+PostgreSQL is required — there is no local-file fallback, so a misconfigured
+database fails at startup instead of silently writing to throwaway storage.
+
+| Variable | Purpose |
+| --- | --- |
+| `DATABASE_URL` | Full DSN, e.g. `postgres://user:pass@host:5432/dbname`. Preferred. |
+| `POSTGRES_HOST` / `POSTGRES_PORT` / `POSTGRES_DB` / `POSTGRES_USER` / `POSTGRES_PASSWORD` | Discrete alternative, used when `DATABASE_URL` is unset. |
+| `DB_SSL_REQUIRE` | Require TLS to the database. `True` for RDS, `False` for a local container. |
+| `DB_CONN_MAX_AGE` | Seconds to reuse a connection (default `600`); `0` disables persistent connections. |
+
+`docker compose up db` starts a local Postgres matching the values in
+[`.env.example`](.env.example). Migrating an existing `db.sqlite3` is a one-off:
+
+```bash
+cd -yatrubackend-
+export DATABASE_URL='postgres://yatrusathi:yatrusathi-dev-password@localhost:5432/yatrusathi'
+bash scripts/import_from_sqlite.sh
+```
 
 ### Frontend (`-yatruSathiFrontend-/.env`)
 
@@ -180,8 +214,10 @@ docker compose up --build
 # frontend :8080   backend :8000/api/   chatbot :5005
 ```
 
-The backend uses SQLite by default and switches to Postgres when `DATABASE_URL`
-is set (compose and Kubernetes both set it).
+Compose runs all three tiers: the `db` Postgres container, the Django API, and
+the nginx-served React bundle (plus the AI side-car). The backend waits for the
+database, migrates, then serves. Postgres data lives in the `postgres_data`
+volume — `docker compose down` keeps it, `down -v` discards it.
 
 ## CI/CD
 

@@ -59,6 +59,25 @@ jobs:
       # Placeholder value — required for settings to import, not a real secret.
       SECRET_KEY: ci-not-a-real-secret
       DEBUG: "True"
+      # Postgres is the only supported engine, so CI runs the real thing.
+      # pytest-django creates/drops test_yatrusathi off this connection.
+      DATABASE_URL: postgres://yatrusathi:yatrusathi@localhost:5432/yatrusathi
+      DB_SSL_REQUIRE: "False"
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: yatrusathi
+          POSTGRES_USER: yatrusathi
+          POSTGRES_PASSWORD: yatrusathi
+        ports:
+          - 5432:5432
+        # Hold the job's steps back until the server actually accepts queries.
+        options: >-
+          --health-cmd "pg_isready -U yatrusathi -d yatrusathi"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     steps:
       - uses: actions/checkout@v7
 

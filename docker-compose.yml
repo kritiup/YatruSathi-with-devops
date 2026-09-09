@@ -3,9 +3,15 @@
 #   cp .env.example .env      # optional: override any default below
 #   docker compose up --build
 #
-# Frontend  →  http://localhost:${FRONTEND_PORT:-8080}
-# Backend   →  http://localhost:${BACKEND_PORT:-8000}/api/
+# Three tiers:
+#   Presentation  frontend  →  http://localhost:${FRONTEND_PORT:-8080}   (React SPA on nginx)
+#   Application   backend   →  http://localhost:${BACKEND_PORT:-8000}/api/ (Django REST API)
+#   Data          db        →  postgres:5432 (published on ${POSTGRES_PORT:-5432} for psql)
+#
+# The chatbot is an optional AI side-car alongside the application tier.
 # Chatbot   →  http://localhost:${CHATBOT_PORT:-5005}/  (AI + Socket.IO)
+#
+# Only the backend talks to Postgres; the browser never reaches the data tier.
 #
 # Supabase is an EXTERNAL managed service — it is never containerised here.
 # The frontend talks to it directly from the browser using the public
@@ -14,6 +20,35 @@
 name: yatrusathi
 
 services:
+  # ───────────────────────────  Postgres (data tier)  ──────────────────
+  # Reached only from inside the compose network by the backend. The host
+  # port publish is a convenience for psql/GUI clients — drop it to close
+  # the database off entirely.
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-yatrusathi}
+      POSTGRES_USER: ${POSTGRES_USER:-yatrusathi}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-yatrusathi-dev-password}
+      # Keeps initdb deterministic across host locales.
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - yatrusathi
+    healthcheck:
+      # `pg_isready` answers during initdb's temporary server too, so match the
+      # real database and user to avoid starting the backend a moment too early.
+      test:
+        ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-yatrusathi} -d ${POSTGRES_DB:-yatrusathi}"]
+      interval: 10s
+      timeout: 5s
+      start_period: 30s
+      retries: 5
+
   # ─────────────────────────────  Django API  ──────────────────────────
   backend:
     build:
@@ -30,8 +65,11 @@ services:
       CSRF_TRUSTED_ORIGINS: ${DJANGO_CSRF_TRUSTED_ORIGINS:-http://localhost:${FRONTEND_PORT:-8080},http://127.0.0.1:${FRONTEND_PORT:-8080}}
       # Never force an HTTPS redirect on the plain-HTTP compose stack.
       SECURE_SSL_REDIRECT: ${DJANGO_SECURE_SSL_REDIRECT:-False}
-      # SQLite lives on a named volume so data survives `down`/`up`.
-      SQLITE_PATH: /app/data/db.sqlite3
+      # Data tier. `db` is the compose service hostname; the password is
+      # interpolated from the same variables the db service is created with.
+      DATABASE_URL: ${DATABASE_URL:-postgres://${POSTGRES_USER:-yatrusathi}:${POSTGRES_PASSWORD:-yatrusathi-dev-password}@db:5432/${POSTGRES_DB:-yatrusathi}}
+      # No TLS on the container-network hop to the local db service.
+      DB_SSL_REQUIRE: ${DB_SSL_REQUIRE:-False}
       # Optional built-in admin account (admin login stays 503 until set).
       ADMIN_EMAIL: ${DJANGO_ADMIN_EMAIL:-}
       ADMIN_PASSWORD: ${DJANGO_ADMIN_PASSWORD:-}
@@ -46,8 +84,10 @@ services:
     ports:
       - "${BACKEND_PORT:-8000}:8000"
     volumes:
-      - backend_data:/app/data      # db.sqlite3
       - backend_media:/app/media     # user uploads
+    depends_on:
+      db:
+        condition: service_healthy
     networks:
       - yatrusathi
     healthcheck:
@@ -142,5 +182,5 @@ networks:
     driver: bridge
 
 volumes:
-  backend_data:
-  backend_media:
+  postgres_data:   # Postgres data directory — survives `down`, not `down -v`
+  backend_media:   # user uploads

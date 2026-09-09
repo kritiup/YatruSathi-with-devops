@@ -51,6 +51,11 @@ class AuthService:
             headers={
                 "Authorization": f"Bearer {api_key}",
                 "Content-Type": "application/json",
+                # Required. api.resend.com sits behind Cloudflare, which blocks
+                # urllib's default "Python-urllib/3.x" agent outright — every
+                # request comes back as a 403 Cloudflare page that never reaches
+                # Resend, whatever the API key.
+                "User-Agent": "YatruSathi/1.0 (+https://yatrusathi.local)",
             },
             method="POST",
         )
@@ -60,9 +65,23 @@ class AuthService:
                 if resp.status >= 400:
                     raise Exception(f"Resend API error: HTTP {resp.status}")
         except HTTPError as exc:
-            raise Exception(f"Resend API error: {exc.code} {exc.reason}")
+            # Include the body: Resend explains refusals there (unverified
+            # sender domain, sandbox recipient restrictions, invalid key), and
+            # the status line alone makes those indistinguishable.
+            raise Exception(
+                f"Resend API error: {exc.code} {exc.reason} — "
+                f"{self._read_error_body(exc)}"
+            )
         except URLError as exc:
             raise Exception(f"Resend connection error: {exc.reason}")
+
+    @staticmethod
+    def _read_error_body(exc: HTTPError, limit: int = 500) -> str:
+        """Best-effort read of an error response body, for logging."""
+        try:
+            return exc.read().decode("utf-8", "replace")[:limit].strip()
+        except Exception:  # pragma: no cover - body already consumed/closed
+            return "<no response body>"
 
     def _create_email_otp(self, user: User) -> bool:
         """Create a fresh OTP for ``user`` and email it.
