@@ -118,6 +118,32 @@ class TestLogin:
         )
         assert response.status_code == 401
 
+    def test_weak_wrong_password_is_401_not_a_complexity_complaint(
+        self, api, verified_user
+    ):
+        # A simple mistyped password used to hit the signup complexity rules and
+        # come back 403 "must contain at least one uppercase letter" with
+        # verification_required — which the UI showed as "email not verified".
+        response = api.post(
+            "/api/auth/login/",
+            {"email": verified_user.email, "password": "wrongpass"},
+            format="json",
+        )
+        assert response.status_code == 401
+        assert "uppercase" not in str(response.data).lower()
+        assert response.data.get("verification_required") is None
+
+    def test_login_does_not_police_password_composition(self, api, verified_user):
+        # Even a password that could never pass signup validation must read as
+        # a plain credential failure at login.
+        response = api.post(
+            "/api/auth/login/",
+            {"email": verified_user.email, "password": "nouppercaseorsymbol"},
+            format="json",
+        )
+        assert response.status_code == 401
+        assert "symbol" not in str(response.data).lower()
+
     def test_unknown_email_is_401(self, api):
         response = api.post(
             "/api/auth/login/",
