@@ -125,6 +125,14 @@ def forgot_password_reset_api(request):
             {"error": "Invalid or expired reset token"},
             status=status.HTTP_400_BAD_REQUEST,
         )
+    # Reset is a place where a password is *chosen*, so the same complexity
+    # rules as signup apply. Without this, a reset could set a weaker password
+    # than signup would ever have allowed.
+    try:
+        AuthService().validate_password(new_password)
+    except ValueError as exc:
+        return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
     user.set_password(new_password)
     user.save(update_fields=["password"])
     user.profile.password_reset_token = ""

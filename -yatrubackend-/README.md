@@ -88,6 +88,30 @@ convenient than real delivery.
 
 #### Enabling delivery to real users
 
+There are two ways. Until one of them is done, mail reaches **nobody** except
+the Resend account owner — in `DEBUG` the console backend prints the message to
+the log and the API still reports success, which looks like a silent failure.
+
+**Option A — Gmail SMTP (no domain needed, works immediately)**
+
+1. Turn on 2-Step Verification for the Google account.
+2. Create an App Password at
+   [myaccount.google.com/apppasswords](https://myaccount.google.com/apppasswords)
+   — 16 characters.
+3. Set both values in the root `.env`, then `docker compose up -d backend`:
+
+   ```bash
+   EMAIL_HOST_USER=you@gmail.com
+   EMAIL_HOST_PASSWORD=your-16-char-app-password
+   ```
+
+Django switches to the SMTP backend automatically as soon as
+`EMAIL_HOST_PASSWORD` is set. Gmail sends to any recipient, roughly 500 per day.
+If you are not using Resend at all, blank `RESEND_API_KEY` too — otherwise every
+send makes a doomed Resend call first and logs a 403 before falling back.
+
+**Option B — verify a domain in Resend (better deliverability)**
+
 1. **Own a domain.** Any registrar works; it does not have to serve the site.
 2. **Add it in Resend** → [resend.com/domains](https://resend.com/domains) →
    *Add Domain*. Resend gives you DKIM/SPF records (and optionally DMARC).
