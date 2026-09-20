@@ -73,6 +73,27 @@ class TestForgotPasswordFlow:
             "/api/auth/forgot-password/request-otp/", {"email": email}, format="json"
         )
 
+    def _reset_token_for(self, api, user):
+        """Drive steps 1 and 2 and hand back a usable reset token."""
+        with (
+            patch(
+                "event.services.auth_service.AuthService._generate_otp_code",
+                return_value="123456",
+            ),
+            patch(
+                "event.services.auth_service.AuthService._deliver_otp_email",
+                return_value=True,
+            ),
+        ):
+            self._request_otp(api, user.email)
+        verify = api.post(
+            "/api/auth/forgot-password/verify-otp/",
+            {"email": user.email, "code": "123456"},
+            format="json",
+        )
+        assert verify.status_code == 200
+        return verify.data["reset_token"]
+
     def test_full_reset_changes_the_password(self, api, resettable_user):
         # The OTP is stored hashed, so pin the generated code rather than
         # trying to read it back out of the database.
@@ -161,6 +182,38 @@ class TestForgotPasswordFlow:
             format="json",
         )
         assert response.status_code == 400
+
+    def test_reset_enforces_password_complexity(self, api, resettable_user):
+        # The rule belongs here, where a password is chosen. Reset previously
+        # accepted anything, so it could set a weaker password than signup.
+        token = self._reset_token_for(api, resettable_user)
+        response = api.post(
+            "/api/auth/forgot-password/reset/",
+            {
+                "email": "reset.me@gmail.com",
+                "reset_token": token,
+                "new_password": "alllowercase",
+            },
+            format="json",
+        )
+        assert response.status_code == 400
+        assert "uppercase" in str(response.data).lower()
+        resettable_user.refresh_from_db()
+        assert resettable_user.check_password(GOOD_PASSWORD)
+
+    def test_reset_rejects_a_password_without_a_symbol(self, api, resettable_user):
+        token = self._reset_token_for(api, resettable_user)
+        response = api.post(
+            "/api/auth/forgot-password/reset/",
+            {
+                "email": "reset.me@gmail.com",
+                "reset_token": token,
+                "new_password": "NoSymbolHere1",
+            },
+            format="json",
+        )
+        assert response.status_code == 400
+        assert "symbol" in str(response.data).lower()
 
     def test_reset_rejects_a_bad_token(self, api, resettable_user):
         response = api.post(
