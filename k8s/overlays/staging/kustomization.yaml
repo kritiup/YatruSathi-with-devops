@@ -36,6 +36,7 @@ patches:
           - { secretKey: GROQ_API_KEY,           remoteRef: { key: yatrusathi/app-staging, property: GROQ_API_KEY } }
           - { secretKey: RESEND_API_KEY,         remoteRef: { key: yatrusathi/app-staging, property: RESEND_API_KEY } }
           - { secretKey: DJANGO_ADMIN_PASSWORD,  remoteRef: { key: yatrusathi/app-staging, property: DJANGO_ADMIN_PASSWORD } }
+          - { secretKey: EMAIL_HOST_PASSWORD,    remoteRef: { key: yatrusathi/app-staging, property: EMAIL_HOST_PASSWORD } }
 
   - target:
       kind: ConfigMap
