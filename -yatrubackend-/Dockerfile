@@ -14,7 +14,8 @@ ENV PATH="/opt/venv/bin:$PATH"
 WORKDIR /app
 COPY requirements.txt .
 COPY requirements/ requirements/
-RUN pip install --upgrade pip && pip install -r requirements.txt
+RUN pip install --no-cache-dir --upgrade pip setuptools \
+    && pip install --no-cache-dir -r requirements.txt
 
 
 # ────────────────────────────  Runtime stage  ───────────────────────────
@@ -29,7 +30,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 # Patch the base image's Python tooling: Trivy flags setuptools and the
 # msgpack vendored inside pip. Neither is a declared dependency, so the
 # only place to fix them is here.
-RUN pip install --no-cache-dir --upgrade pip setuptools
+RUN /usr/local/bin/python -m pip install --no-cache-dir --upgrade pip setuptools
 
 # Unprivileged runtime user
 RUN groupadd --system app && useradd --system --gid app --home-dir /app app
