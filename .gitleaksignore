@@ -1,0 +1,28 @@
+# Known false positives, reviewed one by one.
+#
+# gitleaks scans the FULL git history (the CI job checks out with
+# fetch-depth: 0), so a finding in an old or since-deleted file keeps failing
+# every run until it is listed here. Each line is a fingerprint:
+#   <commit>:<file>:<rule>:<line>
+#
+# Real secrets must NEVER be silenced this way — rotate them instead. Nothing
+# below is a credential; every entry was inspected before being added.
+
+# Terraform placeholder literals. secrets.tf seeds AWS Secrets Manager with the
+# literal string "REPLACE_ME"; the real values are set in the AWS console after
+# apply and are never in git. The rule matches `... password = "..."` shape.
+dfc1360d2bed3d894d2709bdec6ea8f7b76ef35d:infra/terraform/secrets.tf:hashicorp-tf-password:50
+732127c4873ce31f7f0af3702c714d0e72f3dcd9:infra/terraform/secrets.tf:hashicorp-tf-password:37
+
+# Test fixture password ("pw-organizer-1") for a user created inside the test
+# database. It is not a credential for anything that exists.
+90ae7f6fbb1903992b6dba2ee8ac798931530280:-yatrubackend-/event/tests/conftest.py:generic-api-key:22
+
+# Historic commit in the chatbot service; the current file reads its value from
+# the environment. Kept only because the old commit is still in history.
+90ae7f6fbb1903992b6dba2ee8ac798931530280:-Yatrusathi-AIchatbot/app.py:generic-api-key:22
+
+# AUDIT_REPORT.md was a security write-up that *documented* previously leaked
+# keys so they could be rotated. The file has since been deleted, but it stays
+# in history. The keys it listed are dealt with separately.
+0cc8cb22fb5c98cdcc2cab7a5205c41dad7504e4:AUDIT_REPORT.md:generic-api-key:217

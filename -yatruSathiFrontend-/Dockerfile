@@ -26,6 +26,10 @@ RUN npm run build
 # ───────────────────────────  Serve stage  ──────────────────────────────
 FROM nginx:1.31-alpine AS serve
 
+# Pull in Alpine security patches released after the base image was built
+# (Trivy flags libuuid CVEs that already have fixed packages upstream).
+RUN apk --no-cache upgrade
+
 # SPA-aware config: history fallback, asset caching, gzip.
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 
@@ -34,7 +38,9 @@ COPY --from=build /app/dist /usr/share/nginx/html
 
 EXPOSE 80
 
+# Exec (JSON) form — wget already exits non-zero on failure, so the old
+# `|| exit 1` added nothing.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
-    CMD wget -q -O /dev/null http://127.0.0.1/ || exit 1
+    CMD ["wget", "-q", "-O", "/dev/null", "http://127.0.0.1/"]
 
 # nginx:alpine already runs nginx in the foreground as its CMD.

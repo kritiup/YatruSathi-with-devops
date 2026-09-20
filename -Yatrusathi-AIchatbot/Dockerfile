@@ -27,6 +27,11 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     # so this service runs as a SINGLE gunicorn worker (see CMD).
     GUNICORN_THREADS=50
 
+# Patch the base image's Python tooling: Trivy flags setuptools and the
+# msgpack vendored inside pip. Neither is a declared dependency, so the
+# only place to fix them is here.
+RUN pip install --no-cache-dir --upgrade pip setuptools
+
 # Unprivileged runtime user
 RUN groupadd --system app && useradd --system --gid app --home-dir /app app
 
@@ -42,10 +47,9 @@ EXPOSE 5005
 
 # Liveness: the service is up if /health answers 2xx/3xx. Inline Python keeps
 # the slim image free of curl/wget (matches the backend image's approach).
+# Exec (JSON) form: no shell, so the probe's own exit code is the result.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-    CMD python -c "import sys,urllib.request as u; \
-sys.exit(0 if u.urlopen('http://127.0.0.1:5005/health', timeout=4).status < 400 else 1)" \
-    || exit 1
+    CMD ["python", "-c", "import sys,urllib.request as u; sys.exit(0 if u.urlopen('http://127.0.0.1:5005/health', timeout=4).status < 400 else 1)"]
 
 # Flask-SocketIO in threading mode: gthread worker, exactly one worker.
 CMD ["sh", "-c", "exec gunicorn app:app \

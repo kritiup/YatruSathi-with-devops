@@ -26,6 +26,11 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     DJANGO_SETTINGS_MODULE=backend.settings \
     PATH="/opt/venv/bin:$PATH"
 
+# Patch the base image's Python tooling: Trivy flags setuptools and the
+# msgpack vendored inside pip. Neither is a declared dependency, so the
+# only place to fix them is here.
+RUN pip install --no-cache-dir --upgrade pip setuptools
+
 # Unprivileged runtime user
 RUN groupadd --system app && useradd --system --gid app --home-dir /app app
 
@@ -52,10 +57,9 @@ EXPOSE 8000
 # Shallow liveness check: the app is up if Django answers with any status < 500.
 # The forwarded-proto header mirrors the production TLS proxy, so SECURE_SSL_REDIRECT
 # (on when DEBUG=False) does not turn this into a redirect loop.
+# Exec (JSON) form: no shell is involved, so the trailing `|| exit 1` is both
+# impossible and unnecessary — the probe already exits 0 or 1 itself.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
-    CMD python -c "import sys,urllib.request as u; \
-r=u.Request('http://127.0.0.1:8000/api/', headers={'X-Forwarded-Proto':'https'}); \
-sys.exit(0 if u.urlopen(r, timeout=4).status < 500 else 1)" \
-    || exit 1
+    CMD ["python", "-c", "import sys,urllib.request as u; r=u.Request('http://127.0.0.1:8000/api/', headers={'X-Forwarded-Proto':'https'}); sys.exit(0 if u.urlopen(r, timeout=4).status < 500 else 1)"]
 
 ENTRYPOINT ["./docker-entrypoint.sh"]
