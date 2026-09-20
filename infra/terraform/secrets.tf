@@ -44,6 +44,10 @@ resource "aws_secretsmanager_secret_version" "app" {
     GROQ_API_KEY          = "REPLACE_ME"
     RESEND_API_KEY        = "REPLACE_ME"
     DJANGO_ADMIN_PASSWORD = "REPLACE_ME"
+    # Gmail App Password (or any SMTP password) for the fallback transport.
+    # Leave as-is to run on Resend alone; EMAIL_HOST_USER in the ConfigMap
+    # must also be set for SMTP to be attempted at all.
+    EMAIL_HOST_PASSWORD   = "REPLACE_ME"
   })
 
   lifecycle {
