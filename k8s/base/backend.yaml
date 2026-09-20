@@ -40,6 +40,8 @@ spec:
               valueFrom: { secretKeyRef: { name: yatrusathi-app-secrets, key: RESEND_API_KEY } }
             - name: ADMIN_PASSWORD
               valueFrom: { secretKeyRef: { name: yatrusathi-app-secrets, key: DJANGO_ADMIN_PASSWORD } }
+            - name: EMAIL_HOST_PASSWORD
+              valueFrom: { secretKeyRef: { name: yatrusathi-app-secrets, key: EMAIL_HOST_PASSWORD } }
           readinessProbe:
             httpGet:
               path: /api/
