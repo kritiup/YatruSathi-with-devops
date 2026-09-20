@@ -25,6 +25,15 @@ data:
   # recipient except the API key owner, which breaks password reset for real
   # users. `manage.py check --deploy` warns if this is left at the sandbox value.
   RESEND_FROM_EMAIL: "no-reply@REPLACE_WITH_VERIFIED_DOMAIN"
+  # SMTP fallback, used when Resend is unset or refuses the message. The
+  # password is a secret and arrives via the ExternalSecret; everything else
+  # is plain config. Leave EMAIL_HOST_USER blank to disable SMTP entirely.
+  EMAIL_HOST: "smtp.gmail.com"
+  EMAIL_PORT: "587"
+  EMAIL_USE_TLS: "True"
+  EMAIL_HOST_USER: ""
+  EMAIL_TIMEOUT: "10"
+  DEFAULT_FROM_EMAIL: ""
 
   # ── AI chatbot ───────────────────────────────────────────────────
   GROQ_MODEL: "llama-3.3-70b-versatile"
