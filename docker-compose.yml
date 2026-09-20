@@ -73,9 +73,22 @@ services:
       # Optional built-in admin account (admin login stays 503 until set).
       ADMIN_EMAIL: ${DJANGO_ADMIN_EMAIL:-}
       ADMIN_PASSWORD: ${DJANGO_ADMIN_PASSWORD:-}
-      # Optional transactional email (OTP). Blank ⇒ console/no-op.
+      # Transactional email (signup OTP + password reset).
+      # Resend is tried first over its HTTP API...
       RESEND_API_KEY: ${RESEND_API_KEY:-}
       RESEND_FROM_EMAIL: ${RESEND_FROM_EMAIL:-onboarding@resend.dev}
+      # ...then SMTP. With no RESEND key and no SMTP password the console
+      # backend prints the mail (DEBUG only) instead of delivering it, which is
+      # why "sent" can still mean nobody received anything.
+      EMAIL_HOST: ${EMAIL_HOST:-smtp.gmail.com}
+      EMAIL_PORT: ${EMAIL_PORT:-587}
+      EMAIL_USE_TLS: ${EMAIL_USE_TLS:-True}
+      EMAIL_HOST_USER: ${EMAIL_HOST_USER:-}
+      EMAIL_HOST_PASSWORD: ${EMAIL_HOST_PASSWORD:-}
+      EMAIL_TIMEOUT: ${EMAIL_TIMEOUT:-10}
+      # Envelope sender for the SMTP path. Gmail rewrites this to the
+      # authenticated account anyway, so it matters most for other providers.
+      DEFAULT_FROM_EMAIL: ${DEFAULT_FROM_EMAIL:-}
       # Gunicorn worker count.
       WEB_CONCURRENCY: ${WEB_CONCURRENCY:-3}
       # Error tracking. Blank ⇒ disabled.
