@@ -158,13 +158,8 @@ class AuthService:
             )
             return False
 
-    def _validate_credentials(self, email: str, password: str) -> None:
-        """
-        Validates email domain and password complexity.
-        Password: At least one uppercase letter and one symbol.
-        Email: Domain must be in settings.ALLOWED_EMAIL_DOMAINS.
-        """
-        # Email domain validation
+    def _validate_email_domain(self, email: str) -> None:
+        """Reject sign-ups from domains outside settings.ALLOWED_EMAIL_DOMAINS."""
         domain = email.split("@")[-1].lower()
         allowed_domains = getattr(settings, "ALLOWED_EMAIL_DOMAINS", [])
         if allowed_domains and domain not in allowed_domains:
@@ -172,7 +167,15 @@ class AuthService:
                 f'Email domain @{domain} is not allowed. Allowed domains: {", ".join(allowed_domains)}'
             )
 
-        # Password complexity validation
+    def validate_password(self, password: str) -> None:
+        """Enforce password complexity: at least one uppercase letter and one symbol.
+
+        This belongs to the places where a password is *chosen* — signup and
+        password reset — and deliberately NOT to login. Checking it at login
+        told someone who simply mistyped their password that it "must contain an
+        uppercase letter", and locked out any account whose password predates
+        the rule. Login's job is only to decide whether the credentials match.
+        """
         if not any(c.isupper() for c in password):
             raise ValueError("Password must contain at least one uppercase letter")
 
@@ -182,11 +185,15 @@ class AuthService:
                 "Password must contain at least one symbol (!@#$%^&* etc.)"
             )
 
-    def login(self, email: str, password: str) -> Optional[Dict[str, Any]]:
-        # Validate credentials format
-        self._validate_credentials(email, password)
+    def _validate_credentials(self, email: str, password: str) -> None:
+        """Both checks, for the sign-up path."""
+        self._validate_email_domain(email)
+        self.validate_password(password)
 
-        # Find user by email
+    def login(self, email: str, password: str) -> Optional[Dict[str, Any]]:
+        # No format validation here on purpose — see validate_password().
+        # A wrong password must read as "invalid email or password", not as a
+        # complaint about its composition.
         user = self.user_repo.get_by_email(email)
         if not user:
             return None
