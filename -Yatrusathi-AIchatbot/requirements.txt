@@ -17,7 +17,7 @@ python-dotenv==1.2.3
 supabase==2.31.0
 
 # ── Error tracking (inert unless SENTRY_DSN is set) ─────────────────
-sentry-sdk==2.69.2
+sentry-sdk==2.70.0
 
 # ── Production WSGI server (matches the backend's gunicorn pin) ──────
 gunicorn==26.2.0
