@@ -11,13 +11,13 @@ simple-websocket==1.1.0
 
 # ── LLM + config ────────────────────────────────────────────────────
 groq==1.7.0
-python-dotenv==1.2.3
+python-dotenv==1.2.4
 
 # ── Optional non-blocking chat logging ──────────────────────────────
 supabase==2.31.0
 
 # ── Error tracking (inert unless SENTRY_DSN is set) ─────────────────
-sentry-sdk==2.69.2
+sentry-sdk==2.71.0
 
 # ── Production WSGI server (matches the backend's gunicorn pin) ──────
 gunicorn==26.2.0
